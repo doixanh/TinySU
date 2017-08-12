@@ -5,3 +5,5 @@
 
 #define TINYSU_VER 1
 #define TINYSU_VER_STR "0.1"
+
+#define TINYSU_PORT 12385
