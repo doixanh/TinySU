@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-I.
-DEPS = 
+DEPS = tinysu.h
 OBJ = tinysu.o 
 OUT = tinysu
 

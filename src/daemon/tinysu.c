@@ -13,8 +13,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "tinysu.h"
+
 void printUsage(char *self) {
-    fprintf(stderr, "Usage: %s [-h] [-d] [-c command]\n", self);
+    printf("This is TinySU.\n");
+    printf("Usage: %s -hdvV [-c command]\n", self);
     exit(1);
 }
 
@@ -25,8 +28,7 @@ void goDaemonMode() {
 
 int main(int argc, char **argv) {
     int opt = 0;
-    printf("This is TinySU.\n");
-    while ((opt = getopt(argc, argv, "hd")) != -1) {
+    while ((opt = getopt(argc, argv, "hdvV")) != -1) {
         switch (opt) {
             case 'h':
                 printUsage(argv[0]);
@@ -34,6 +36,12 @@ int main(int argc, char **argv) {
             case 'd':
                 goDaemonMode();
                 break;
+            case 'V':
+                printf("%d\n", TINYSU_VER);
+                exit(0);
+            case 'v':
+                printf("%s\n", TINYSU_VER_STR);
+                exit(0);
             default: /* '?' */
                 printUsage(argv[0]);
         }
