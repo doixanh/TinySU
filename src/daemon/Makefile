@@ -5,12 +5,12 @@ OBJ = tinysu.o
 OUT = tinysu
 
 %.o: %.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
+	@$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OUT): $(OBJ)
-	gcc -o $@ $^ $(CFLAGS)
+	@gcc -o $@ $^ $(CFLAGS)
 
 .PHONY: clean
 
 clean:
-	rm -f $(OUT) *.o
+	@rm -f $(OUT) *.o
