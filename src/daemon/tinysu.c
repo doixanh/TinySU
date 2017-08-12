@@ -76,6 +76,9 @@ void goDaemonMode() {
     exit(0);
 }
 
+/**
+ * The FUN starts here :)
+ */
 int main(int argc, char **argv) {
     int opt = 0;
     while ((opt = getopt(argc, argv, "hdvV")) != -1) {
