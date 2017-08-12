@@ -25,9 +25,9 @@ void goDaemonMode() {
 
 int main(int argc, char **argv) {
     int opt = 0;
-	printf("This is TinySU.\n");
+    printf("This is TinySU.\n");
     while ((opt = getopt(argc, argv, "hd")) != -1) {
-        switch(opt) {
+        switch (opt) {
             case 'h':
                 printUsage(argv[0]);
                 break;
