@@ -15,10 +15,10 @@ adb install TinySU.apk
 ```
 
 No systemless thingie at the moment, yet.
-
-
+Oh, and TinySU  will be compatible with the famous [libsuperuser](https://github.com/Chainfire/libsuperuser)
 
 How?
 ===========
+
 
 Still thinking :D
