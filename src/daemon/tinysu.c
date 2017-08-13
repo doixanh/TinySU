@@ -136,6 +136,8 @@ void acceptClients(int sockfd) {
                 } else {
                     // some error. remove it from the "active" fd array
                     printf("client %d has disconnected.\n", clientfds[i]);
+                    shutdown(clientfds[i], SHUT_RDWR);
+                    close(clientfds[i]);
                     clientfds[i] = 0;
                 }
             }
