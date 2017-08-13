@@ -15,6 +15,7 @@
 #include <string.h>
 #include <netinet/ip.h>
 #include <sys/fcntl.h>
+#include <sys/errno.h>
 
 #include "tinysu.h"
 
@@ -84,8 +85,11 @@ void acceptClients(int sockfd) {
     char s[1024];
     struct timeval timeout;
 
-    // wait for max 10s for incoming su command
+    memset(&timeout, 0, sizeof(timeout));
     timeout.tv_sec = 10;
+
+    // wait for max 10s for incoming su command
+    printf("Accepting clients on sock %d\n", sockfd);
 
     while (clen > 0) {
         FD_ZERO(&readset);                    // clear the set
@@ -101,28 +105,34 @@ void acceptClients(int sockfd) {
             }
         }
 
-        // pool and wait, blocked indefinitely
-        select(maxfd + 1, &readset, NULL, NULL, &timeout);
+        // pool and wait for 10s max
+        int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
+        if (selectVal < 0) {
+            perror("select");
+            exit(1);
+        }
 
         // is that an incoming connection from the listening socket?
         if (FD_ISSET(sockfd, &readset)) {
             memset(&caddr, 0, sizeof(caddr));
             clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
-            printf("New client %d\n", clientfd);
+            if (clientfd >= 0) {
+                printf("New client %d\n", clientfd);
 
-            // welcome it
-            write(clientfd, "Welcome!", 8);
+                // welcome it
+                write(clientfd, "Welcome!", 8);
 
-            // make it nonblock as well
-            fl = fcntl(clientfd, F_GETFL, 0);
-            fl |= O_NONBLOCK;
-            fcntl(clientfd, F_SETFL, fl);
+                // make it nonblock as well
+                fl = fcntl(clientfd, F_GETFL, 0);
+                fl |= O_NONBLOCK;
+                fcntl(clientfd, F_SETFL, fl);
 
-            // add it to the clientfds array so that we can include it in client fdset
-            for (i = 0; i < MAX_CLIENT; i++) {
-                if (clientfds[i] == 0) {
-                    clientfds[i] = clientfd;
-                    break;
+                // add it to the clientfds array so that we can include it in client fdset
+                for (i = 0; i < MAX_CLIENT; i++) {
+                    if (clientfds[i] == 0) {
+                        clientfds[i] = clientfd;
+                        break;
+                    }
                 }
             }
         }
@@ -133,7 +143,54 @@ void acceptClients(int sockfd) {
                 memset(s, 0, sizeof(s));
                 if (read(clientfds[i], s, sizeof(s)) > 0) {
                     printf("client %d says: %s\n", clientfds[i], s);
-                } else {
+
+                    // fork. execute.
+                    int execpid = fork();
+                    if (execpid == 0) {
+                        // we are child.
+
+                        // redirect output to the client
+                        char *token;
+                        char *splitter = " ";
+                        token = strtok(s, splitter);
+                        char *argv[1024];       // max 1024 args. that's quite plenty...
+                        int argc = 0;
+
+                        while(token != NULL) {
+                            // allocate memory in heap for each argument element
+                            argv[argc] = malloc(strlen(token) + 1); 	// to include last NULL
+                            memset(argv[argc], 0, strlen(token) + 1);
+                            strcpy(argv[argc], token);
+                            argc++;
+                            token = strtok(NULL, splitter);
+                        }
+
+                        // we use this NULL to indicate termination of the list argv
+                        argv[argc] = NULL;
+
+                        // now that we are child, redirect our stdout/stderr to clientfd
+                        dup2(clientfd, fileno(stdout));
+                        dup2(clientfd, fileno(stderr));
+                        execvp(argv[0], argv);
+
+                        // if code goes here, meaning we have problems with execvp
+                        printf("Error execvp\n");
+                        exit(1);
+                    }
+                    else {
+                        printf("parent is waiting for pid %d\n", execpid);
+                        // ok we are parent. wait for child to finish
+                        waitpid(execpid, NULL, 0);
+
+                        printf("disconnecting client %d after exec()\n", clientfds[i]);
+
+                        // and close
+                        shutdown(clientfds[i], SHUT_RDWR);
+                        close(clientfds[i]);
+                        clientfds[i] = 0;
+                    }
+                }
+                else {
                     // some error. remove it from the "active" fd array
                     printf("client %d has disconnected.\n", clientfds[i]);
                     shutdown(clientfds[i], SHUT_RDWR);
