@@ -7,3 +7,6 @@
 #define TINYSU_VER_STR "0.1"
 
 #define TINYSU_PORT 12385
+#define MAX_CLIENT 100
+
+#define SHELL "/bin/bash"
