@@ -217,11 +217,25 @@ void goDaemonMode() {
 /**
  * Connect to the daemon, pass cmd and return the response to stdout
  */
-void goClientMode(char *cmd) {
+void goClientMode(int argc, char **argv) {
     struct sockaddr_in saddr;
     struct hostent *h;
     int sockfd;
     char buf[1024];
+    char cmd[ARG_LEN];
+    fd_set readset;
+    struct timeval timeout;
+
+    // concat argv
+    memset(cmd, 0, sizeof(cmd));
+    for (int i = optind - 1; i < argc; i++) {
+        strcat(cmd, argv[i]);
+        strcat(cmd, " ");
+    }
+    printf("Passing cmd '%s'\n", cmd);
+
+    memset(&timeout, 0, sizeof(timeout));
+    timeout.tv_sec = 10;
 
     // create the socket
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -242,18 +256,39 @@ void goClientMode(char *cmd) {
         exit(1);
     }
 
+    // make it nonblocking
+    int fl;
+    fl = fcntl(sockfd, F_GETFL, 0);
+    fl |= O_NONBLOCK;
+    fcntl(sockfd, F_SETFL, fl);
+
     printf("Connected successfully!\n");
     printf("Sending command %s\n", cmd);
     write(sockfd, cmd, strlen(cmd) + 1);
 
     while (1) {
-        memset(buf, 0, sizeof(buf));
-        ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
-        if (res != EOF) {
-            printf("%s", buf);
+        FD_ZERO(&readset);                    // clear the set
+        FD_SET(sockfd, &readset);            // add listening socket to the set
+
+        int maxfd = sockfd;                    // maxfd will be used for select()
+
+        // pool and wait for 10s max
+        int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
+        if (selectVal < 0) {
+            perror("select");
+            exit(1);
         }
-        else {
-            break;
+
+        // is that an incoming connection from the listening socket?
+        if (FD_ISSET(sockfd, &readset)) {
+            memset(buf, 0, sizeof(buf));
+            ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
+            if (res > 0) {
+                printf("%s", buf);
+            }
+            else {
+                break;
+            }
         }
     }
     close(sockfd);
@@ -279,7 +314,7 @@ int main(int argc, char **argv) {
                 printf("%s\n", TINYSU_VER_STR);
                 exit(0);
             case 'c':
-                goClientMode(optarg);
+                goClientMode(argc, argv);
                 exit(0);
             default: /* '?' */
                 printUsage(argv[0]);

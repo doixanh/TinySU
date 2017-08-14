@@ -9,4 +9,5 @@
 #define TINYSU_PORT 12385
 #define MAX_CLIENT 100
 
+#define ARG_LEN 10240
 #define SHELL "/bin/bash"
