@@ -16,7 +16,7 @@
 #include <netinet/ip.h>
 #include <sys/fcntl.h>
 #include <selinux/selinux.h>
-
+#include <android/log.h>
 #include "tinysu.h"
 
 
@@ -28,9 +28,9 @@ char *shell = NULL;
  * Show some help.
  */
 void printUsage(char *self) {
-    LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
-    LogI(DAEMON, "Usage: %s -hdvV [-c command]", self);
-    exit(1);
+    printf("This is TinySU ver %s.\n", TINYSU_VER_STR);
+    printf("Usage: %s -hdvV [-c command]\n", self);
+    exit(0);
 }
 
 /**
@@ -271,8 +271,7 @@ void goClientMode(int argc, char **argv) {
         // pool and wait for 10s max
         int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
-            perror("select");
-            exit(1);
+            break;
         }
 
         // is that an incoming connection from the listening socket?
@@ -287,6 +286,7 @@ void goClientMode(int argc, char **argv) {
             }
         }
     }
+    fflush(stdout);
     close(sockfd);
 }
 
@@ -294,7 +294,12 @@ void goClientMode(int argc, char **argv) {
  * The FUN starts here :)
  */
 int main(int argc, char **argv) {
+    setbuf(stdout, NULL);
     int opt = 0;
+    LogV(CLIENT, "Runngin su parameters:");
+    for (int i = 0; i < argc; i++) {
+        LogV(CLIENT, "- %s", argv[i]);
+    }
     while ((opt = getopt(argc, argv, "hdvVc:s:")) != -1) {
         switch (opt) {
             case 'h':
@@ -319,5 +324,4 @@ int main(int argc, char **argv) {
                 printUsage(argv[0]);
         }
     }
-    printUsage(argv[0]);
 }
