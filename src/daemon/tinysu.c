@@ -15,6 +15,7 @@
 #include <string.h>
 #include <netinet/ip.h>
 #include <sys/fcntl.h>
+#include <sys/wait.h>
 #include <selinux/selinux.h>
 #include <android/log.h>
 #include "tinysu.h"
@@ -178,12 +179,11 @@ void acceptClients(int sockfd) {
                         // ok we are parent. wait for child to finish
                         waitpid(execpid, NULL, 0);
 
-                        LogI(DAEMON, " - Disconnecting client %d after exec()", clientfds[i]);
+                        LogI(DAEMON, " - Parent has finished waiting for pid %d", execpid);
 
-                        // and close
-                        shutdown(clientfds[i], SHUT_RDWR);
-                        close(clientfds[i]);
-                        clientfds[i] = 0;
+                        // don't disconnect. client will do that. send an EOF to indicate that the process has finished
+                        char eof = (char)EOF;
+                        write(clientfds[i], &eof, 1);
                     }
                 }
                 else {
@@ -212,26 +212,12 @@ void goDaemonMode() {
 }
 
 /**
- * Connect to the daemon, pass cmd and return the response to stdout
+ * Connect to the daemon
+ * @return sockfd
  */
-void goClientMode(int argc, char **argv) {
+int connectToDaemon() {
     struct sockaddr_in saddr;
     int sockfd;
-    char buf[1024];
-    char cmd[ARG_LEN];
-    fd_set readset;
-    struct timeval timeout;
-
-    // concat argv
-    memset(cmd, 0, sizeof(cmd));
-    for (int i = optind - 1; i < argc; i++) {
-        strcat(cmd, argv[i]);
-        strcat(cmd, " ");
-    }
-    LogV(CLIENT, "Passing cmd '%s'", cmd);
-
-    memset(&timeout, 0, sizeof(timeout));
-    timeout.tv_sec = 10;
 
     // create the socket
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -259,7 +245,20 @@ void goClientMode(int argc, char **argv) {
     fcntl(sockfd, F_SETFL, fl);
 
     LogV(CLIENT, "Connected successfully!");
-    LogV(CLIENT, "Sending command %s", cmd);
+    return sockfd;
+}
+
+/**
+ * Send a single command to the daemon, wait for response
+ */
+void sendCommand(int sockfd, char * cmd) {
+    char buf[1024];
+    fd_set readset;
+    struct timeval timeout;
+    memset(&timeout, 0, sizeof(timeout));
+    timeout.tv_sec = 10;
+
+    LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
     write(sockfd, cmd, strlen(cmd) + 1);
 
     while (1) {
@@ -271,6 +270,7 @@ void goClientMode(int argc, char **argv) {
         // pool and wait for 10s max
         int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
+            // timed out
             break;
         }
 
@@ -279,7 +279,15 @@ void goClientMode(int argc, char **argv) {
             memset(buf, 0, sizeof(buf));
             ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
             if (res > 0) {
+                char * eofPos = strchr(buf, (char)EOF);
+                if (eofPos != 0) {
+                    LogI(CLIENT, " - SendCommand: EOF found in response. Breaking loop now.");
+                    eofPos[0] = 0;
+                }
                 printf("%s", buf);
+                if (eofPos != 0) {
+                    break;
+                }
             }
             else {
                 break;
@@ -287,6 +295,38 @@ void goClientMode(int argc, char **argv) {
         }
     }
     fflush(stdout);
+}
+
+/**
+ * Connect to the daemon, pass cmd and return the response to stdout
+ */
+void goCommandMode(int argc, char **argv) {
+    LogI(CLIENT, "CommandMode: Going command mode.");
+    char cmd[ARG_LEN];
+
+    // concat argv
+    memset(cmd, 0, sizeof(cmd));
+    for (int i = optind - 1; i < argc; i++) {
+        strcat(cmd, argv[i]);
+        strcat(cmd, " ");
+    }
+
+    int sockfd = connectToDaemon();
+    sendCommand(sockfd, cmd);
+    close(sockfd);
+}
+
+/**
+ * Go to interactive mode
+ */
+void goInteractiveMode() {
+    LogI(CLIENT, "Interactive: Going interactive mode.");
+    int sockfd = connectToDaemon();
+    char cmd[ARG_LEN];
+    while (fgets(cmd, sizeof cmd, stdin) != NULL) {
+        LogI(CLIENT, "Interactive: got command %s", cmd);
+        sendCommand(sockfd, cmd);
+    }
     close(sockfd);
 }
 
@@ -296,7 +336,7 @@ void goClientMode(int argc, char **argv) {
 int main(int argc, char **argv) {
     setbuf(stdout, NULL);
     int opt = 0;
-    LogV(CLIENT, "Runngin su parameters:");
+    LogV(CLIENT, "Running su parameters:");
     for (int i = 0; i < argc; i++) {
         LogV(CLIENT, "- %s", argv[i]);
     }
@@ -315,7 +355,7 @@ int main(int argc, char **argv) {
                 printf("%s\n", TINYSU_VER_STR);
                 exit(0);
             case 'c':
-                goClientMode(argc, argv);
+                goCommandMode(argc, argv);
                 exit(0);
             case 's':
                 shell = optarg;
@@ -324,4 +364,7 @@ int main(int argc, char **argv) {
                 printUsage(argv[0]);
         }
     }
+
+    // go interactive mode
+    goInteractiveMode();
 }
