@@ -119,9 +119,6 @@ void acceptClients(int sockfd) {
             if (clientfd >= 0) {
                 printf("New client %d\n", clientfd);
 
-                // welcome it
-                write(clientfd, "Welcome!", 8);
-
                 // make it nonblock as well
                 fl = fcntl(clientfd, F_GETFL, 0);
                 fl |= O_NONBLOCK;
@@ -148,27 +145,17 @@ void acceptClients(int sockfd) {
                     int execpid = fork();
                     if (execpid == 0) {
                         // we are child.
-
-                        // redirect output to the client
-                        char *token;
-                        char *splitter = " ";
-                        token = strtok(s, splitter);
-                        char *argv[1024];       // max 1024 args. that's quite plenty...
+                        char *argv[4];
                         int argc = 0;
-
-                        while(token != NULL) {
-                            // allocate memory in heap for each argument element
-                            argv[argc] = malloc(strlen(token) + 1); 	// to include last NULL
-                            memset(argv[argc], 0, strlen(token) + 1);
-                            strcpy(argv[argc], token);
-                            argc++;
-                            token = strtok(NULL, splitter);
-                        }
+                        argv[argc++] = SHELL;
+                        argv[argc++] = "-c";
+                        argv[argc++] = s;
 
                         // we use this NULL to indicate termination of the list argv
                         argv[argc] = NULL;
 
                         // now that we are child, redirect our stdout/stderr to clientfd
+                        clientfd = clientfds[i];
                         dup2(clientfd, fileno(stdout));
                         dup2(clientfd, fileno(stderr));
                         execvp(argv[0], argv);
