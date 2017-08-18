@@ -11,3 +11,13 @@
 
 #define ARG_LEN 10240
 #define SHELL "/bin/bash"
+
+#define VERBOSE(x)
+#define ERROR(x)    x
+
+#define CLIENT "Client"
+#define DAEMON "Daemon"
+
+#define LogI(x, y, args...) printf("I/[%10s] " y "\n", x, ## args)
+#define LogV(x, y, args...) VERBOSE(printf("V/[%10s] " y "\n", x, ## args))
+#define LogE(x, y, args...) ERROR(printf("E/[%10s] " y "\n", x, ## args))

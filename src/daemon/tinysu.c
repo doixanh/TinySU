@@ -27,8 +27,8 @@ int clientfds[MAX_CLIENT];
  * Show some help.
  */
 void printUsage(char *self) {
-    printf("This is TinySU.\n");
-    printf("Usage: %s -hdvV [-c command]\n", self);
+    LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
+    LogI(DAEMON, "Usage: %s -hdvV [-c command]", self);
     exit(1);
 }
 
@@ -39,7 +39,7 @@ int initSocket() {
     int sockfd, clen, clientfd;
     struct sockaddr_in saddr, caddr;
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("Error creating socket\n");
+        LogE(DAEMON, "Error creating socket");
         exit(1);
     }
 
@@ -57,12 +57,12 @@ int initSocket() {
     saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     saddr.sin_port = htons(TINYSU_PORT);
     if (bind(sockfd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) {
-        printf("Error binding socket\n");
+        LogE(DAEMON, "Error binding socket");
         exit(1);
     }
 
     if (listen(sockfd, 5) < 0) {
-        printf("Error listening to socket\n");
+        LogE(DAEMON, "Error listening to socket");
         exit(1);
     }
 
@@ -89,7 +89,8 @@ void acceptClients(int sockfd) {
     timeout.tv_sec = 10;
 
     // wait for max 10s for incoming su command
-    printf("Accepting clients on sock %d\n", sockfd);
+
+    LogI(DAEMON, "Accepting clients on sock %d", sockfd);
 
     while (clen > 0) {
         FD_ZERO(&readset);                    // clear the set
@@ -117,7 +118,7 @@ void acceptClients(int sockfd) {
             memset(&caddr, 0, sizeof(caddr));
             clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
             if (clientfd >= 0) {
-                printf("New client %d\n", clientfd);
+                LogI(DAEMON, "New client %d", clientfd);
 
                 // make it nonblock as well
                 fl = fcntl(clientfd, F_GETFL, 0);
@@ -139,7 +140,7 @@ void acceptClients(int sockfd) {
             if (clientfds[i] > 0 && FD_ISSET(clientfds[i], &readset)) {
                 memset(s, 0, sizeof(s));
                 if (read(clientfds[i], s, sizeof(s)) > 0) {
-                    printf("client %d says: %s\n", clientfds[i], s);
+                    LogI(DAEMON, " - Client %d says: %s", clientfds[i], s);
 
                     // fork. execute.
                     int execpid = fork();
@@ -161,15 +162,17 @@ void acceptClients(int sockfd) {
                         execvp(argv[0], argv);
 
                         // if code goes here, meaning we have problems with execvp
-                        printf("Error execvp\n");
+                        LogE(DAEMON, "Error execvp");
                         exit(1);
                     }
                     else {
-                        printf("parent is waiting for pid %d\n", execpid);
+                        LogI(DAEMON, " - Parent is waiting for pid %d", execpid);
+
                         // ok we are parent. wait for child to finish
                         waitpid(execpid, NULL, 0);
 
-                        printf("disconnecting client %d after exec()\n", clientfds[i]);
+
+                        LogI(DAEMON, " - Disconnecting client %d after exec()", clientfds[i]);
 
                         // and close
                         shutdown(clientfds[i], SHUT_RDWR);
@@ -179,7 +182,7 @@ void acceptClients(int sockfd) {
                 }
                 else {
                     // some error. remove it from the "active" fd array
-                    printf("client %d has disconnected.\n", clientfds[i]);
+                    LogI(DAEMON, " - Client %d has disconnected.", clientfds[i]);
                     shutdown(clientfds[i], SHUT_RDWR);
                     close(clientfds[i]);
                     clientfds[i] = 0;
@@ -195,7 +198,8 @@ void acceptClients(int sockfd) {
  * Go into background, listen and accept incoming su requests
  */
 void goDaemonMode() {
-    printf("I'm going to daemon mode.\n");
+    LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
+    LogI(DAEMON, "Operating in daemon mode.");
     int sockfd = initSocket();
     acceptClients(sockfd);
     exit(0);
@@ -206,7 +210,6 @@ void goDaemonMode() {
  */
 void goClientMode(int argc, char **argv) {
     struct sockaddr_in saddr;
-    struct hostent *h;
     int sockfd;
     char buf[1024];
     char cmd[ARG_LEN];
@@ -219,14 +222,14 @@ void goClientMode(int argc, char **argv) {
         strcat(cmd, argv[i]);
         strcat(cmd, " ");
     }
-    printf("Passing cmd '%s'\n", cmd);
+    LogV(CLIENT, "Passing cmd '%s'", cmd);
 
     memset(&timeout, 0, sizeof(timeout));
     timeout.tv_sec = 10;
 
     // create the socket
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("Error creating socket\n");
+        LogE(CLIENT, "Error creating socket");
         exit(1);
     }
 
@@ -238,7 +241,7 @@ void goClientMode(int argc, char **argv) {
 
     // connect to server
     if (connect(sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
-        printf("Cannot connect to daemon\n");
+        LogE(CLIENT, "Cannot connect to daemon");
         close(sockfd);
         exit(1);
     }
@@ -249,8 +252,8 @@ void goClientMode(int argc, char **argv) {
     fl |= O_NONBLOCK;
     fcntl(sockfd, F_SETFL, fl);
 
-    printf("Connected successfully!\n");
-    printf("Sending command %s\n", cmd);
+    LogV(CLIENT, "Connected successfully!");
+    LogV(CLIENT, "Sending command %s", cmd);
     write(sockfd, cmd, strlen(cmd) + 1);
 
     while (1) {
