@@ -10,7 +10,7 @@
 #define MAX_CLIENT 100
 
 #define ARG_LEN 10240
-#define SHELL "/bin/bash"
+#define DEFAULT_SHELL "/system/bin/sh"
 
 #define VERBOSE(x)
 #define ERROR(x)    x

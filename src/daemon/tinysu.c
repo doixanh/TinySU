@@ -15,13 +15,14 @@
 #include <string.h>
 #include <netinet/ip.h>
 #include <sys/fcntl.h>
-#include <sys/errno.h>
+#include <selinux/selinux.h>
 
 #include "tinysu.h"
 
 
 
 int clientfds[MAX_CLIENT];
+char *shell = NULL;
 
 /**
  * Show some help.
@@ -148,7 +149,7 @@ void acceptClients(int sockfd) {
                         // we are child.
                         char *argv[4];
                         int argc = 0;
-                        argv[argc++] = SHELL;
+                        argv[argc++] = DEFAULT_SHELL;
                         argv[argc++] = "-c";
                         argv[argc++] = s;
 
@@ -159,6 +160,12 @@ void acceptClients(int sockfd) {
                         clientfd = clientfds[i];
                         dup2(clientfd, fileno(stdout));
                         dup2(clientfd, fileno(stderr));
+
+                        setenv("HOME", "/sdcard", 1);
+                        setenv("SHELL", DEFAULT_SHELL, 1);
+                        setenv("USER", "root", 1);
+                        setenv("LOGNAME", "root", 1);
+                        setexeccon("u:r:su:s0");
                         execvp(argv[0], argv);
 
                         // if code goes here, meaning we have problems with execvp
@@ -170,7 +177,6 @@ void acceptClients(int sockfd) {
 
                         // ok we are parent. wait for child to finish
                         waitpid(execpid, NULL, 0);
-
 
                         LogI(DAEMON, " - Disconnecting client %d after exec()", clientfds[i]);
 
@@ -289,7 +295,7 @@ void goClientMode(int argc, char **argv) {
  */
 int main(int argc, char **argv) {
     int opt = 0;
-    while ((opt = getopt(argc, argv, "hdvVc:")) != -1) {
+    while ((opt = getopt(argc, argv, "hdvVc:s:")) != -1) {
         switch (opt) {
             case 'h':
                 printUsage(argv[0]);
@@ -306,6 +312,9 @@ int main(int argc, char **argv) {
             case 'c':
                 goClientMode(argc, argv);
                 exit(0);
+            case 's':
+                shell = optarg;
+                break;
             default: /* '?' */
                 printUsage(argv[0]);
         }
