@@ -8,6 +8,7 @@
 
 #define TINYSU_PORT 12385
 #define MAX_CLIENT 100
+#define END_COMMAND EOF\0
 
 #define ARG_LEN 10240
 #define CLIENT "TinySUClient"

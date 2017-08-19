@@ -17,6 +17,7 @@
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #ifdef ARM
 #include <selinux/selinux.h>
@@ -184,6 +185,7 @@ void acceptClients(int sockfd) {
         for (i = 0; i < MAX_CLIENT; i++) {
             // is that data from a child? forward to the client
             if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
+                memset(s, 0, sizeof(s));
                 ssize_t numread = read(clients[i].out[0], s, sizeof(s));
                 LogI(DAEMON, " - Child %d says: %s", clients[i].pid, s);
                 write(clients[i].fd, s, numread);
@@ -204,6 +206,10 @@ void acceptClients(int sockfd) {
                     LogI(DAEMON, " - Client %d has disconnected.", clients[i].fd);
                     shutdown(clients[i].fd, SHUT_RDWR);
                     close(clients[i].fd);
+
+                    // kill the child
+                    kill(clients[i].pid, SIGTERM);
+
                     clients[i].fd = 0;
                 }
             }
@@ -323,9 +329,8 @@ void goCommandMode(int argc, char **argv) {
         strcat(cmd, argv[i]);
         strcat(cmd, " ");
     }
-
     int sockfd = connectToDaemon();
-    usleep(500*1000);
+    usleep(200*1000);
     sendCommand(sockfd, cmd);
     close(sockfd);
 }
@@ -337,10 +342,29 @@ void goInteractiveMode() {
     LogI(CLIENT, "Interactive: Going interactive mode.");
     int sockfd = connectToDaemon();
     char cmd[ARG_LEN];
-    while (fgets(cmd, sizeof cmd, stdin) != NULL) {
-        LogI(CLIENT, "Interactive: got command %s", cmd);
-        sendCommand(sockfd, cmd);
+    char cmdAll[ARG_LEN];
+    struct timeval timeout;
+    fd_set inputSet;
+    memset(cmd, 0, sizeof(cmd));
+    memset(cmdAll, 0, sizeof(cmdAll));
+    memset(&timeout, 0, sizeof(timeout));
+
+    // use select to wait for input
+    timeout.tv_sec = 5;
+    while (1) {
+        FD_ZERO(&inputSet);
+        FD_SET(0, &inputSet);   // add stdin
+        if (select(1, &inputSet, NULL, NULL, &timeout)) {
+            fgets(cmd, sizeof cmd, stdin);
+            LogI(CLIENT, "Interactive: got command %s", cmd);
+            strcat(cmdAll, cmd);
+        }
+        else {
+            break;
+        }
     }
+    LogI(CLIENT, "Interactive: All commands %s", cmdAll);
+    sendCommand(sockfd, cmdAll);
     close(sockfd);
 }
 
