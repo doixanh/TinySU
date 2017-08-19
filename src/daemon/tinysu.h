@@ -10,12 +10,31 @@
 #define MAX_CLIENT 100
 
 #define ARG_LEN 10240
-#define DEFAULT_SHELL "/system/bin/sh"
-
 #define CLIENT "TinySUClient"
 #define DAEMON "TinySUDaemon"
 
-#define LogI(x, y, args...) __android_log_print(ANDROID_LOG_INFO, x, y, ## args)
-#define LogV(x, y, args...) __android_log_print(ANDROID_LOG_VERBOSE, x, y, ## args)
-#define LogE(x, y, args...) __android_log_print(ANDROID_LOG_ERROR, x, y, ## args)
+#ifdef ARM
+    #define DEFAULT_SHELL "/system/bin/sh"
+#else
+    #define DEFAULT_SHELL "/bin/sh"
+#endif
 
+
+#ifdef ARM
+    #define LogI(x, y, args...) __android_log_print(ANDROID_LOG_INFO, x, y, ## args)
+    #define LogV(x, y, args...) __android_log_print(ANDROID_LOG_VERBOSE, x, y, ## args)
+    #define LogE(x, y, args...) __android_log_print(ANDROID_LOG_ERROR, x, y, ## args)
+#else
+    #define VERBOSE(x)
+    #define ERROR(x)    x
+    #define LogI(x, y, args...) printf("I/[%10s] " y "\n", x, ## args)
+    #define LogV(x, y, args...) VERBOSE(printf("V/[%10s] " y "\n", x, ## args))
+    #define LogE(x, y, args...) ERROR(printf("E/[%10s] " y "\n", x, ## args))
+#endif
+
+typedef struct Client {
+    int fd;
+    int pid;
+    int in[2];
+    int out[2];
+};

@@ -9,6 +9,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/external
 LOCAL_SHARED_LIBRARIES := libselinux
 LOCAL_LDLIBS := -llog
+LOCAL_CFLAGS := -DARM
 include $(BUILD_EXECUTABLE)
 
 # lib
