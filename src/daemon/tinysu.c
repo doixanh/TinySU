@@ -109,6 +109,18 @@ void acceptClients(int sockfd) {
         // add all clientfds into the reading set
         for (i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].fd > 0) {
+                if (getpgid(clients[i].pid) < 0) {
+                    // child is killed.
+                    // TODO: use SIGCHLD signal instead
+                    LogI(DAEMON, "Child %d is killed. Closing connection.", clients[i].pid);
+                    close(clients[i].in[0]);
+                    close(clients[i].in[1]);
+                    close(clients[i].out[0]);
+                    close(clients[i].out[1]);
+                    close(clients[i].fd);
+                    clients[i].fd = 0;
+                    continue;
+                }
                 FD_SET(clients[i].fd, &readset);    // add a FD into the set
                 if (clients[i].fd > maxfd) maxfd = clients[i].fd;
                 FD_SET(clients[i].out[0], &readset);
@@ -117,7 +129,7 @@ void acceptClients(int sockfd) {
         }
 
         // pool and wait for 10s max
-        timeout.tv_sec = 10;
+        timeout.tv_sec = 1;
         int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
             perror("select");
@@ -189,7 +201,7 @@ void acceptClients(int sockfd) {
                 if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
                     memset(s, 0, sizeof(s));
                     ssize_t numread = read(clients[i].out[0], s, sizeof(s));
-                    LogI(DAEMON, " - Child %d says: %s", clients[i].pid, s);
+                    LogI(DAEMON, " - Child %d says len=%d: %s", clients[i].pid, numread, s);
                     write(clients[i].fd, s, numread);
                 }
 
@@ -302,7 +314,7 @@ void sendCommand(int sockfd, char * cmd) {
         }
 
         // pool and wait for 1s max
-        timeout.tv_sec = 1;
+        timeout.tv_sec = 5;
         int selectVal = select(sockfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
             // error
@@ -346,7 +358,7 @@ void sendCommand(int sockfd, char * cmd) {
                     printf("%s", buf);
                 }
                 else {
-                    LogI(CLIENT, "Nothing to read from sockfd");
+                    LogI(CLIENT, "Daemon has just disconnected us :(");
                     // nothing to read. server has disconnected.
                     break;
                 }
