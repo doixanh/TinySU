@@ -275,14 +275,22 @@ void sendCommand(int sockfd, char * cmd) {
     fd_set readset;
     struct timeval timeout;
     memset(&timeout, 0, sizeof(timeout));
-    timeout.tv_sec = 10;
+    timeout.tv_sec = 1;
 
-    LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
-    write(sockfd, cmd, strlen(cmd) + 1);
+    if (cmd != NULL) {
+        LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
+        write(sockfd, cmd, strlen(cmd) + 1);
+    }
+
+    int selectStdin = 1;
 
     while (1) {
-        FD_ZERO(&readset);                    // clear the set
-        FD_SET(sockfd, &readset);            // add listening socket to the set
+        FD_ZERO(&readset);                     // clear the set
+        FD_SET(sockfd, &readset);              // add listening socket to the set
+
+        if (selectStdin) {
+            FD_SET(fileno(stdin), &readset);       // add stdin to the set
+        }
 
         int maxfd = sockfd;                    // maxfd will be used for select()
 
@@ -293,24 +301,39 @@ void sendCommand(int sockfd, char * cmd) {
             break;
         }
 
-        // is that an incoming connection from the listening socket?
-        if (FD_ISSET(sockfd, &readset)) {
-            memset(buf, 0, sizeof(buf));
-            ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
-            if (res > 0) {
-                char * eofPos = strchr(buf, (char)EOF);
-                if (eofPos != 0) {
-                    LogI(CLIENT, " - SendCommand: EOF found in response. Breaking loop now.");
-                    eofPos[0] = 0;
+        // anything happened?
+        if (selectVal > 0) {
+            // is that from stdin? send to the socket
+            if (cmd == NULL && FD_ISSET(fileno(stdin), &readset)) {
+                memset(buf, 0, sizeof(buf));
+                fgets(buf, sizeof(buf), stdin);
+                if (strlen(buf) > 0) {
+                    LogI(CLIENT, "Got command from stdin %s", buf);
+                    write(sockfd, buf, strlen(buf));
                 }
-                printf("%s", buf);
-                if (eofPos != 0) {
+                else {
+                    // end of the output. Don't poll stdin anymore.
+                    selectStdin = 0;
+                }
+            }
+
+            // is that an incoming connection from the listening socket?
+            if (FD_ISSET(sockfd, &readset)) {
+                memset(buf, 0, sizeof(buf));
+                ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
+                if (res > 0) {
+                    printf("%s", buf);
+                }
+                else {
+                    // nothing to read. server has disconnected.
                     break;
                 }
             }
-            else {
-                break;
-            }
+        }
+        else if (selectVal == 0) {
+            // no more data from the socket AND from stdin.
+            // safe to break
+            break;
         }
     }
     fflush(stdout);
@@ -341,30 +364,7 @@ void goCommandMode(int argc, char **argv) {
 void goInteractiveMode() {
     LogI(CLIENT, "Interactive: Going interactive mode.");
     int sockfd = connectToDaemon();
-    char cmd[ARG_LEN];
-    char cmdAll[ARG_LEN];
-    struct timeval timeout;
-    fd_set inputSet;
-    memset(cmd, 0, sizeof(cmd));
-    memset(cmdAll, 0, sizeof(cmdAll));
-    memset(&timeout, 0, sizeof(timeout));
-
-    // use select to wait for input
-    timeout.tv_sec = 5;
-    while (1) {
-        FD_ZERO(&inputSet);
-        FD_SET(0, &inputSet);   // add stdin
-        if (select(1, &inputSet, NULL, NULL, &timeout)) {
-            fgets(cmd, sizeof cmd, stdin);
-            LogI(CLIENT, "Interactive: got command %s", cmd);
-            strcat(cmdAll, cmd);
-        }
-        else {
-            break;
-        }
-    }
-    LogI(CLIENT, "Interactive: All commands %s", cmdAll);
-    sendCommand(sockfd, cmdAll);
+    sendCommand(sockfd, NULL);
     close(sockfd);
 }
 
