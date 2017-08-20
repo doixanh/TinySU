@@ -33,9 +33,9 @@
     #define LogE(x, y, args...) ERROR(printf("E/[%10s] " y "\n", x, ## args))
 #endif
 
-typedef struct Client {
+typedef struct client {
     int fd;
     int pid;
     int in[2];
     int out[2];
-};
+} client_t;

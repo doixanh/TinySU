@@ -28,7 +28,7 @@
 
 
 
-struct Client clients[MAX_CLIENT];
+client_t clients[MAX_CLIENT];
 char *shell = NULL;
 
 /**
@@ -95,7 +95,6 @@ void acceptClients(int sockfd) {
     struct timeval timeout;
 
     memset(&timeout, 0, sizeof(timeout));
-    timeout.tv_sec = 10;
 
     // wait for max 10s for incoming su command
 
@@ -118,99 +117,102 @@ void acceptClients(int sockfd) {
         }
 
         // pool and wait for 10s max
+        timeout.tv_sec = 10;
         int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
             perror("select");
             exit(1);
         }
+        else if (selectVal == 0) {
+            LogI(DAEMON, "Nothing for daemon select()");
+        }
+        else if (selectVal > 0) {
+            // is that an incoming connection from the listening socket?
+            if (FD_ISSET(sockfd, &readset)) {
+                memset(&caddr, 0, sizeof(caddr));
+                clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
+                if (clientfd >= 0) {
+                    LogI(DAEMON, "New client %d", clientfd);
 
-        // is that an incoming connection from the listening socket?
-        if (FD_ISSET(sockfd, &readset)) {
-            memset(&caddr, 0, sizeof(caddr));
-            clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
-            if (clientfd >= 0) {
-                LogI(DAEMON, "New client %d", clientfd);
+                    // make it nonblock as well
+                    fl = fcntl(clientfd, F_GETFL, 0);
+                    fl |= O_NONBLOCK;
+                    fcntl(clientfd, F_SETFL, fl);
 
-                // make it nonblock as well
-                fl = fcntl(clientfd, F_GETFL, 0);
-                fl |= O_NONBLOCK;
-                fcntl(clientfd, F_SETFL, fl);
+                    // add it to the client array so that we can include it in client fdset
+                    int clientIdx = -1;
+                    for (i = 0; i < MAX_CLIENT; i++) {
+                        if (clients[i].fd == 0) {
+                            clients[i].fd = clientfd;
+                            pipe(clients[i].in);
+                            pipe(clients[i].out);
+                            clientIdx = i;
+                            break;
+                        }
+                    }
 
-                // add it to the client array so that we can include it in client fdset
-                int clientIdx = -1;
-                for (i = 0; i < MAX_CLIENT; i++) {
-                    if (clients[i].fd == 0) {
-                        clients[i].fd = clientfd;
-                        pipe(clients[i].in);
-                        pipe(clients[i].out);
-                        clientIdx = i;
-                        break;
+                    // pre-fork
+                    clientpid = fork();
+                    if (clientpid == 0) {
+                        // we are child.
+                        char *argv[2];
+                        int argc = 0;
+                        argv[argc++] = DEFAULT_SHELL;
+                        argv[argc] = NULL;
+
+                        // redirect
+                        dup2(clients[i].in[0], fileno(stdin));           // child input to stdin pipe 0
+                        dup2(clients[i].out[1], fileno(stdout));         // child output to stdout pipe 1
+                        dup2(clients[i].out[1], fileno(stderr));         // child err to stdout pipe 1
+
+                        setenv("HOME", "/sdcard", 1);
+                        setenv("SHELL", DEFAULT_SHELL, 1);
+                        setenv("USER", "root", 1);
+                        setenv("LOGNAME", "root", 1);
+#ifdef ARM
+                        setexeccon("u:r:su:s0");
+#endif
+                        execvp(argv[0], argv);
+
+                        // if code goes here, meaning we have problems with execvp
+                        LogE(DAEMON, "Error execvp");
+                        exit(1);
+                    } else {
+                        // save pid to the list
+                        clients[clientIdx].pid = clientpid;
                     }
                 }
-
-                // pre-fork
-                clientpid = fork();
-                if (clientpid == 0) {
-                    // we are child.
-                    char *argv[2];
-                    int argc = 0;
-                    argv[argc++] = DEFAULT_SHELL;
-                    argv[argc] = NULL;
-
-                    // redirect
-                    dup2(clients[i].in[0], fileno(stdin));           // child input to stdin pipe 0
-                    dup2(clients[i].out[1], fileno(stdout));         // child output to stdout pipe 1
-                    dup2(clients[i].out[1], fileno(stderr));         // child err to stdout pipe 1
-
-                    setenv("HOME", "/sdcard", 1);
-                    setenv("SHELL", DEFAULT_SHELL, 1);
-                    setenv("USER", "root", 1);
-                    setenv("LOGNAME", "root", 1);
-#ifdef ARM
-                    setexeccon("u:r:su:s0");
-#endif
-                    execvp(argv[0], argv);
-
-                    // if code goes here, meaning we have problems with execvp
-                    LogE(DAEMON, "Error execvp");
-                    exit(1);
-                }
-                else {
-                    // save pid to the list
-                    clients[clientIdx].pid = clientpid;
-                }
-            }
-        }
-
-        for (i = 0; i < MAX_CLIENT; i++) {
-            // is that data from a child? forward to the client
-            if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
-                memset(s, 0, sizeof(s));
-                ssize_t numread = read(clients[i].out[0], s, sizeof(s));
-                LogI(DAEMON, " - Child %d says: %s", clients[i].pid, s);
-                write(clients[i].fd, s, numread);
             }
 
-            // is that data from a previously-connect client?
-            if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, &readset)) {
-                memset(s, 0, sizeof(s));
-                ssize_t numread = read(clients[i].fd, s, sizeof(s));
-                if (numread > 0) {
-                    LogI(DAEMON, " - Client %d says: %s", clients[i].fd, s);
-                    strcat(s, "\n");
-                    // write through the pipe to the child...
-                    write(clients[i].in[1], s, numread + 1);
+            for (i = 0; i < MAX_CLIENT; i++) {
+                // is that data from a child? forward to the client
+                if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
+                    memset(s, 0, sizeof(s));
+                    ssize_t numread = read(clients[i].out[0], s, sizeof(s));
+                    LogI(DAEMON, " - Child %d says: %s", clients[i].pid, s);
+                    write(clients[i].fd, s, numread);
                 }
-                else {
-                    // some error. remove it from the "active" fd array
-                    LogI(DAEMON, " - Client %d has disconnected.", clients[i].fd);
-                    shutdown(clients[i].fd, SHUT_RDWR);
-                    close(clients[i].fd);
 
-                    // kill the child
-                    kill(clients[i].pid, SIGTERM);
+                // is that data from a previously-connect client?
+                if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, &readset)) {
+                    memset(s, 0, sizeof(s));
+                    ssize_t numread = read(clients[i].fd, s, sizeof(s));
+                    if (numread > 0) {
+                        LogI(DAEMON, " - Client %d says: %s", clients[i].fd, s);
+                        strcat(s, "\n");
+                        // write through the pipe to the child...
+                        write(clients[i].in[1], s, numread + 1);
+                    } else {
+                        // some error. remove it from the "active" fd array
+                        LogI(DAEMON, " - Client %d has disconnected.", clients[i].fd);
+                        shutdown(clients[i].fd, SHUT_RDWR);
+                        close(clients[i].fd);
 
-                    clients[i].fd = 0;
+                        // kill the child
+                        kill(clients[i].pid, SIGKILL);
+
+                        clients[i].fd = 0;
+                    }
                 }
             }
         }
@@ -272,15 +274,21 @@ int connectToDaemon() {
  * @param cmd command to send. if NULL, get command from stdin
  */
 void sendCommand(int sockfd, char * cmd) {
-    char buf[1024];
+    char buf[1024], incmd[1024];
     fd_set readset;
     struct timeval timeout;
     memset(&timeout, 0, sizeof(timeout));
-    timeout.tv_sec = 1;
 
     if (cmd != NULL) {
         LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
         write(sockfd, cmd, strlen(cmd) + 1);
+    }
+    else {
+        // make stdin nonblocking
+        int fl;
+        fl = fcntl(fileno(stdin), F_GETFL, 0);
+        fl |= O_NONBLOCK;
+        fcntl(fileno(stdin), F_SETFL, fl);
     }
 
     int selectStdin = 1;
@@ -289,10 +297,12 @@ void sendCommand(int sockfd, char * cmd) {
         FD_ZERO(&readset);                     // clear the set
         FD_SET(sockfd, &readset);              // add listening socket to the set
         if (selectStdin) {
+            LogI(CLIENT, "Adding stdin into readset");
             FD_SET(fileno(stdin), &readset);   // add stdin to the set
         }
 
         // pool and wait for 1s max
+        timeout.tv_sec = 1;
         int selectVal = select(sockfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
             // error
@@ -304,13 +314,24 @@ void sendCommand(int sockfd, char * cmd) {
             // is that from stdin? send to the socket
             if (cmd == NULL && FD_ISSET(fileno(stdin), &readset)) {
                 memset(buf, 0, sizeof(buf));
-                fgets(buf, sizeof(buf), stdin);
+                while (1) {
+                    memset(incmd, 0, sizeof(incmd));
+                    fgets(incmd, sizeof(incmd), stdin);
+                    if (strlen(incmd) > 0) {
+                        // LogI(CLIENT, "Got one line from stdin %s", incmd);
+                        strcat(buf, incmd);
+                    }
+                    else {
+                        break;
+                    }
+                }
                 if (strlen(buf) > 0) {
-                    LogI(CLIENT, "Got command from stdin %s", buf);
+                    LogI(CLIENT, "Send command from stdin to daemon %s", buf);
                     write(sockfd, buf, strlen(buf));
                 }
                 else {
-                    // end of the output. Don't poll stdin anymore.
+                    // end of the input. Don't poll stdin anymore.
+                    LogI(CLIENT, "End of input from stdin");
                     selectStdin = 0;
                 }
             }
@@ -320,9 +341,12 @@ void sendCommand(int sockfd, char * cmd) {
                 memset(buf, 0, sizeof(buf));
                 ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
                 if (res > 0) {
+                    // wait for it again!
+                    selectStdin = 1;
                     printf("%s", buf);
                 }
                 else {
+                    LogI(CLIENT, "Nothing to read from sockfd");
                     // nothing to read. server has disconnected.
                     break;
                 }
@@ -332,6 +356,7 @@ void sendCommand(int sockfd, char * cmd) {
             // timed out
             // no more data from the socket AND from stdin.
             // safe to break
+            LogI(CLIENT, "Nothing is ready for select()");
             break;
         }
     }
@@ -342,7 +367,7 @@ void sendCommand(int sockfd, char * cmd) {
  * Connect to the daemon, pass cmd and return the response to stdout
  */
 void goCommandMode(int argc, char **argv) {
-    LogI(CLIENT, "CommandMode: Going command mode.");
+    LogI(CLIENT, "CommandMode: Going command mode. PPID=%d", getppid());
     char cmd[ARG_LEN];
 
     // concat argv
@@ -361,7 +386,7 @@ void goCommandMode(int argc, char **argv) {
  * Go to interactive mode
  */
 void goInteractiveMode() {
-    LogI(CLIENT, "Interactive: Going interactive mode.");
+    LogI(CLIENT, "Interactive: Going interactive mode. PPID=%d", getppid());
     int sockfd = connectToDaemon();
     sendCommand(sockfd, NULL);
     close(sockfd);
