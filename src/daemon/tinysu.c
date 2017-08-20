@@ -268,7 +268,8 @@ int connectToDaemon() {
 }
 
 /**
- * Send a single command to the daemon, wait for response
+ * Send command to server and wait for response.
+ * @param cmd command to send. if NULL, get command from stdin
  */
 void sendCommand(int sockfd, char * cmd) {
     char buf[1024];
@@ -283,21 +284,18 @@ void sendCommand(int sockfd, char * cmd) {
     }
 
     int selectStdin = 1;
-
     while (1) {
+        // prepare readset
         FD_ZERO(&readset);                     // clear the set
         FD_SET(sockfd, &readset);              // add listening socket to the set
-
         if (selectStdin) {
-            FD_SET(fileno(stdin), &readset);       // add stdin to the set
+            FD_SET(fileno(stdin), &readset);   // add stdin to the set
         }
 
-        int maxfd = sockfd;                    // maxfd will be used for select()
-
-        // pool and wait for 10s max
-        int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
+        // pool and wait for 1s max
+        int selectVal = select(sockfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
-            // timed out
+            // error
             break;
         }
 
@@ -331,6 +329,7 @@ void sendCommand(int sockfd, char * cmd) {
             }
         }
         else if (selectVal == 0) {
+            // timed out
             // no more data from the socket AND from stdin.
             // safe to break
             break;
