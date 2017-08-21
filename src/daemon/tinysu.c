@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <errno.h>
 
 #ifdef ARM
 #include <selinux/selinux.h>
@@ -81,6 +82,26 @@ int initSocket() {
 }
 
 /**
+ * Signal handler. Mainly used to process SIGCHLD from children
+ */
+void handleSignals(int signum, siginfo_t *info, void *ptr)  {
+    if (signum == SIGCHLD) {
+        for (int i = 0; i < MAX_CLIENT; i++) {
+            if (clients[i].pid == info->si_pid) {
+                LogI(DAEMON, "Child %d is killed. Closing connection.", clients[i].pid);
+                close(clients[i].in[0]);
+                close(clients[i].in[1]);
+                close(clients[i].out[0]);
+                close(clients[i].out[1]);
+                close(clients[i].fd);
+                clients[i].fd = 0;
+                break;
+            }
+        }
+    }
+}
+
+/**
  * Accept incoming connection
  */
 void acceptClients(int sockfd) {
@@ -96,9 +117,17 @@ void acceptClients(int sockfd) {
 
     memset(&timeout, 0, sizeof(timeout));
 
-    // wait for max 10s for incoming su command
+    // register signal handler to process child exits
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_sigaction = handleSignals;
+    act.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigaction(SIGCHLD, &act, NULL);
+    LogV(DAEMON, "Registered signal handler.");
 
+    // wait for max 10s for incoming su command
     LogI(DAEMON, "Accepting clients on sock %d", sockfd);
+
 
     while (clen > 0) {
         FD_ZERO(&readset);                    // clear the set
@@ -109,18 +138,6 @@ void acceptClients(int sockfd) {
         // add all clientfds into the reading set
         for (i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].fd > 0) {
-                if (getpgid(clients[i].pid) < 0) {
-                    // child is killed.
-                    // TODO: use SIGCHLD signal instead
-                    LogI(DAEMON, "Child %d is killed. Closing connection.", clients[i].pid);
-                    close(clients[i].in[0]);
-                    close(clients[i].in[1]);
-                    close(clients[i].out[0]);
-                    close(clients[i].out[1]);
-                    close(clients[i].fd);
-                    clients[i].fd = 0;
-                    continue;
-                }
                 FD_SET(clients[i].fd, &readset);    // add a FD into the set
                 if (clients[i].fd > maxfd) maxfd = clients[i].fd;
                 FD_SET(clients[i].out[0], &readset);
@@ -129,11 +146,13 @@ void acceptClients(int sockfd) {
         }
 
         // pool and wait for 10s max
-        timeout.tv_sec = 1;
+        timeout.tv_sec = 10;
         int selectVal = select(maxfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
-            perror("select");
-            exit(1);
+            if (errno != EINTR) {
+                perror("select");
+                exit(1);
+            }
         }
         else if (selectVal == 0) {
             LogI(DAEMON, "Nothing for daemon select()");
@@ -314,7 +333,7 @@ void sendCommand(int sockfd, char * cmd) {
         }
 
         // pool and wait for 1s max
-        timeout.tv_sec = 5;
+        timeout.tv_sec = 50;
         int selectVal = select(sockfd + 1, &readset, NULL, NULL, &timeout);
         if (selectVal < 0) {
             // error
