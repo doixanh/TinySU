@@ -38,4 +38,6 @@ typedef struct client {
     int pid;
     int in[2];
     int out[2];
+    int pendingData;
+    int died;
 } client_t;

@@ -84,6 +84,24 @@ int initSocket() {
     return sockfd;
 }
 
+
+/**
+ * Disconnect all clients that are associated with 'marked' died children
+ * Closing the pipes to the children too.
+ */
+void disconnectDeadClient() {
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        if (clients[i].died) {
+            close(clients[i].in[0]);
+            close(clients[i].in[1]);
+            close(clients[i].out[0]);
+            close(clients[i].out[1]);
+            close(clients[i].fd);
+            clients[i].died = 0;
+            clients[i].fd = 0;
+        }
+    }
+}
 /**
  * Signal handler. Mainly used to process SIGCHLD from children
  */
@@ -91,13 +109,8 @@ void handleSignals(int signum, siginfo_t *info, void *ptr)  {
     if (signum == SIGCHLD) {
         for (int i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].pid == info->si_pid) {
-                LogI(DAEMON, "Child %d is killed. Closing connection.", clients[i].pid);
-                close(clients[i].in[0]);
-                close(clients[i].in[1]);
-                close(clients[i].out[0]);
-                close(clients[i].out[1]);
-                close(clients[i].fd);
-                clients[i].fd = 0;
+                LogI(DAEMON, "Child %d is killed. ", clients[i].pid);
+                clients[i].died = 1;
                 break;
             }
         }
@@ -155,6 +168,10 @@ void acceptClients(int sockfd) {
             if (errno != EINTR) {
                 perror("select");
                 exit(1);
+            }
+            else {
+                // select was interrupted, probably by SIGCHLD.
+                disconnectDeadClient();
             }
         }
         else if (selectVal == 0) {
@@ -257,6 +274,8 @@ void acceptClients(int sockfd) {
                 }
             }
         }
+
+        disconnectDeadClient();
     }
     // disconnect
     close(sockfd);
@@ -269,6 +288,7 @@ void goDaemonMode() {
     LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
     LogI(DAEMON, "Operating in daemon mode.");
     int sockfd = initSocket();
+    memset(&clients, 0, sizeof(clients));
     acceptClients(sockfd);
     exit(0);
 }
@@ -367,6 +387,7 @@ void sendCommand(int sockfd, char * cmd) {
                 ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
                 if (res > 0) {
                     write(fileno(stdout), buf, (size_t) res);
+                    LogI(CLIENT, "Daemon returns %s", buf);
 
                     // try to read the remaining data from socket
                     while (1) {
