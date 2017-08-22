@@ -32,6 +32,12 @@
 client_t clients[MAX_CLIENT];
 char *shell = NULL;
 
+void markNonblock(int fd) {
+    // make it nonblock as well
+    int fl = fcntl(fd, F_GETFL, 0);
+    fl |= O_NONBLOCK;
+    fcntl(fd, F_SETFL, fl);
+}
 /**
  * Show some help.
  */
@@ -56,10 +62,7 @@ int initSocket() {
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
     // make it nonblocking
-    int fl;
-    fl = fcntl(sockfd, F_GETFL, 0);
-    fl |= O_NONBLOCK;
-    fcntl(sockfd, F_SETFL, fl);
+    markNonblock(sockfd);
 
     memset(&saddr, 0, sizeof(saddr));
     saddr.sin_family = AF_INET;
@@ -166,9 +169,7 @@ void acceptClients(int sockfd) {
                     LogI(DAEMON, "New client %d", clientfd);
 
                     // make it nonblock as well
-                    fl = fcntl(clientfd, F_GETFL, 0);
-                    fl |= O_NONBLOCK;
-                    fcntl(clientfd, F_SETFL, fl);
+                    markNonblock(clientfd);
 
                     // add it to the client array so that we can include it in client fdset
                     int clientIdx = -1;
@@ -177,6 +178,10 @@ void acceptClients(int sockfd) {
                             clients[i].fd = clientfd;
                             pipe(clients[i].in);
                             pipe(clients[i].out);
+
+                            markNonblock(clients[i].in[0]);
+                            markNonblock(clients[i].out[0]);
+
                             clientIdx = i;
                             break;
                         }
@@ -218,10 +223,15 @@ void acceptClients(int sockfd) {
             for (i = 0; i < MAX_CLIENT; i++) {
                 // is that data from a child? forward to the client
                 if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
-                    memset(s, 0, sizeof(s));
-                    ssize_t numread = read(clients[i].out[0], s, sizeof(s));
-                    LogI(DAEMON, " - Child %d says len=%d: %s", clients[i].pid, numread, s);
-                    write(clients[i].fd, s, numread);
+                    while (1) {
+                        memset(s, 0, sizeof(s));
+                        ssize_t numRead = read(clients[i].out[0], s, sizeof(s));
+                        if (numRead <= 0) {
+                            break;
+                        }
+                        LogI(DAEMON, " - Child %d says len=%d: %s", clients[i].pid, (size_t) numRead, s);
+                        write(clients[i].fd, s, (size_t) numRead);
+                    }
                 }
 
                 // is that data from a previously-connect client?
@@ -291,10 +301,7 @@ int connectToDaemon() {
     }
 
     // make it nonblocking
-    int fl;
-    fl = fcntl(sockfd, F_GETFL, 0);
-    fl |= O_NONBLOCK;
-    fcntl(sockfd, F_SETFL, fl);
+    markNonblock(sockfd);
 
     LogV(CLIENT, "Connected successfully!");
     return sockfd;
@@ -316,21 +323,14 @@ void sendCommand(int sockfd, char * cmd) {
     }
     else {
         // make stdin nonblocking
-        int fl;
-        fl = fcntl(fileno(stdin), F_GETFL, 0);
-        fl |= O_NONBLOCK;
-        fcntl(fileno(stdin), F_SETFL, fl);
+        markNonblock(fileno(stdin));
     }
 
-    int selectStdin = 1;
     while (1) {
         // prepare readset
         FD_ZERO(&readset);                     // clear the set
         FD_SET(sockfd, &readset);              // add listening socket to the set
-        if (selectStdin) {
-            LogI(CLIENT, "Adding stdin into readset");
-            FD_SET(fileno(stdin), &readset);   // add stdin to the set
-        }
+        FD_SET(fileno(stdin), &readset);   // add stdin to the set
 
         // pool and wait for 1s max
         timeout.tv_sec = 50;
@@ -349,7 +349,6 @@ void sendCommand(int sockfd, char * cmd) {
                     memset(incmd, 0, sizeof(incmd));
                     fgets(incmd, sizeof(incmd), stdin);
                     if (strlen(incmd) > 0) {
-                        // LogI(CLIENT, "Got one line from stdin %s", incmd);
                         strcat(buf, incmd);
                     }
                     else {
@@ -360,11 +359,6 @@ void sendCommand(int sockfd, char * cmd) {
                     LogI(CLIENT, "Send command from stdin to daemon %s", buf);
                     write(sockfd, buf, strlen(buf));
                 }
-                else {
-                    // end of the input. Don't poll stdin anymore.
-                    LogI(CLIENT, "End of input from stdin");
-                    selectStdin = 0;
-                }
             }
 
             // is that an incoming connection from the listening socket?
@@ -372,9 +366,17 @@ void sendCommand(int sockfd, char * cmd) {
                 memset(buf, 0, sizeof(buf));
                 ssize_t res = read(sockfd, buf, sizeof(buf) - 1);  // preserve at least one last char for NULL termination
                 if (res > 0) {
-                    // wait for it again!
-                    selectStdin = 1;
-                    printf("%s", buf);
+                    write(fileno(stdout), buf, (size_t) res);
+
+                    // try to read the remaining data from socket
+                    while (1) {
+                        memset(buf, 0, sizeof(buf));
+                        ssize_t numRead = read(sockfd, buf, sizeof(buf) - 1);
+                        if (numRead <= 0) {
+                            break;
+                        }
+                        write(fileno(stdout), buf, (size_t) numRead);
+                    }
                 }
                 else {
                     LogI(CLIENT, "Daemon has just disconnected us :(");
@@ -384,11 +386,7 @@ void sendCommand(int sockfd, char * cmd) {
             }
         }
         else if (selectVal == 0) {
-            // timed out
-            // no more data from the socket AND from stdin.
-            // safe to break
             LogI(CLIENT, "Nothing is ready for select()");
-            break;
         }
     }
     fflush(stdout);

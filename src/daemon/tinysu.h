@@ -26,7 +26,7 @@
     #define LogV(x, y, args...) __android_log_print(ANDROID_LOG_VERBOSE, x, y, ## args)
     #define LogE(x, y, args...) __android_log_print(ANDROID_LOG_ERROR, x, y, ## args)
 #else
-    #define VERBOSE(x)
+    #define VERBOSE(x)  x
     #define ERROR(x)    x
     #define LogI(x, y, args...) printf("I/[%10s] " y "\n", x, ## args)
     #define LogV(x, y, args...) VERBOSE(printf("V/[%10s] " y "\n", x, ## args))
