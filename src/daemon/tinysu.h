@@ -11,13 +11,13 @@
 #define END_COMMAND EOF\0
 
 #define ARG_LEN 10240
-#define CLIENT "TinySUClient"
-#define DAEMON "TinySUDaemon"
+#define CLIENT (char*) "TinySUClient"
+#define DAEMON (char*) "TinySUDaemon"
 
 #ifdef ARM
     #define DEFAULT_SHELL "/system/bin/sh"
 #else
-    #define DEFAULT_SHELL "/bin/sh"
+    #define DEFAULT_SHELL (char*) "/bin/sh"
 #endif
 
 
