@@ -15,7 +15,7 @@
 #define DAEMON (char*) "TinySUDaemon"
 
 #ifdef ARM
-    #define DEFAULT_SHELL "/system/bin/sh"
+    #define DEFAULT_SHELL (char*) "/system/bin/sh"
 #else
     #define DEFAULT_SHELL (char*) "/bin/sh"
 #endif
