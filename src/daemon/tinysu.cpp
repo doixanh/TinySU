@@ -47,6 +47,7 @@ void markNonblock(int fd) {
  */
 template <typename F> void proxy(int from, int to, char *logPrefix, char *fromActor, F onerror) {
     char s[1024];
+    bool firstLoop = true;
     while (true) {
         memset(s, 0, sizeof(s));
         ssize_t numRead = read(from, s, sizeof(s));
@@ -57,6 +58,9 @@ template <typename F> void proxy(int from, int to, char *logPrefix, char *fromAc
             break;
         }
         else if (numRead == 0) {
+            if (firstLoop) {
+                onerror(from);
+            }
             break;
         }
 
@@ -64,6 +68,7 @@ template <typename F> void proxy(int from, int to, char *logPrefix, char *fromAc
             LogI(logPrefix, "%s says %s", fromActor, s);
         }
         write(to, s, (size_t) numRead);
+        firstLoop = false;
     }
 }
 
@@ -122,6 +127,7 @@ int initSocket() {
 void disconnectDeadClient() {
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].died) {
+            LogI(DAEMON, "Child %d died, disconnecting client %d", clients[i].pid, clients[i].fd);
             close(clients[i].in[0]);
             close(clients[i].in[1]);
             close(clients[i].out[0]);
