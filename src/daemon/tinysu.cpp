@@ -51,7 +51,7 @@ template <typename F> void proxy(int from, int to, char *logPrefix, char *fromAc
         memset(s, 0, sizeof(s));
         ssize_t numRead = read(from, s, sizeof(s));
         if (numRead < 0) {
-            if (onerror != nullptr) {
+            if (errno != EAGAIN && onerror != nullptr) {
                 onerror(from);
             }
             break;
@@ -390,7 +390,6 @@ void sendCommand(int sockfd, char * cmd) {
             if (cmd == nullptr && FD_ISSET(STDIN_FILENO, &readset)) {
                 proxy(STDIN_FILENO, sockfd, CLIENT, (char*) "Client stdin", nothing);
             }
-
             // is that an incoming connection from the listening socket?
             if (FD_ISSET(sockfd, &readset)) {
                 proxy(sockfd, STDOUT_FILENO, CLIENT, (char*) "Daemon", [](int from) {
