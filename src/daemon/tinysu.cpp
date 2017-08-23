@@ -45,9 +45,9 @@ void markNonblock(int fd) {
 /**
  * Read all possible data from one file descriptor and write to the other
  */
-template <typename F> void proxy(int from, int to, char * logPrefix, char * fromActor, F onerror) {
+template <typename F> void proxy(int from, int to, char *logPrefix, char *fromActor, F onerror) {
     char s[1024];
-    while (1) {
+    while (true) {
         memset(s, 0, sizeof(s));
         ssize_t numRead = read(from, s, sizeof(s));
         if (numRead < 0) {
@@ -245,9 +245,9 @@ void acceptClients(int sockfd) {
                         argv[argc] = nullptr;
 
                         // redirect
-                        dup2(clients[i].in[0], fileno(stdin));           // child input to stdin pipe 0
-                        dup2(clients[i].out[1], fileno(stdout));         // child output to stdout pipe 1
-                        dup2(clients[i].out[1], fileno(stderr));         // child err to stdout pipe 1
+                        dup2(clients[i].in[0], STDIN_FILENO);           // child input to stdin pipe 0
+                        dup2(clients[i].out[1], STDOUT_FILENO);         // child output to stdout pipe 1
+                        dup2(clients[i].out[1], STDERR_FILENO);         // child err to stdout pipe 1
 
                         setenv("HOME", "/sdcard", 1);
                         setenv("SHELL", DEFAULT_SHELL, 1);
@@ -271,11 +271,13 @@ void acceptClients(int sockfd) {
             for (i = 0; i < MAX_CLIENT; i++) {
                 // is that data from a child? forward to the client
                 if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
+                    // forward to the client
                     proxy(clients[i].out[0], clients[i].fd, DAEMON, (char*) "Child", nothing);
                 }
 
                 // is that data from a previously-connect client?
                 if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, &readset)) {
+                    // forward to the corresponding child's stdin
                     proxy(clients[i].fd, clients[i].in[1], DAEMON, (char*) "Client", [](int from) {
                         // some error. remove it from the "active" fd array
                         LogI(DAEMON, " - Client %d has disconnected.", from);
@@ -365,14 +367,14 @@ void sendCommand(int sockfd, char * cmd) {
     }
     else {
         // make stdin nonblocking
-        markNonblock(fileno(stdin));
+        markNonblock(STDIN_FILENO);
     }
 
-    while (1) {
+    while (true) {
         // prepare readset
         FD_ZERO(&readset);                     // clear the set
         FD_SET(sockfd, &readset);              // add listening socket to the set
-        FD_SET(fileno(stdin), &readset);   // add stdin to the set
+        FD_SET(STDIN_FILENO, &readset);   // add stdin to the set
 
         // pool and wait for 1s max
         timeout.tv_sec = 50;
@@ -385,13 +387,13 @@ void sendCommand(int sockfd, char * cmd) {
         // anything happened?
         if (selectVal > 0) {
             // is that from stdin? send to the socket
-            if (cmd == nullptr && FD_ISSET(fileno(stdin), &readset)) {
-                proxy(fileno(stdin), sockfd, CLIENT, (char*) "Client stdin", nothing);
+            if (cmd == nullptr && FD_ISSET(STDIN_FILENO, &readset)) {
+                proxy(STDIN_FILENO, sockfd, CLIENT, (char*) "Client stdin", nothing);
             }
 
             // is that an incoming connection from the listening socket?
             if (FD_ISSET(sockfd, &readset)) {
-                proxy(sockfd, fileno(stdout), CLIENT, (char*) "Daemon", [](int from) {
+                proxy(sockfd, STDOUT_FILENO, CLIENT, (char*) "Daemon", [](int from) {
                     LogI(CLIENT, "Daemon has just disconnected us :(");
                 });
             }
