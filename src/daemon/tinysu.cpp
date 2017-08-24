@@ -52,7 +52,7 @@ template <typename F> void proxy(int from, int to, char *logPrefix, char *fromAc
         memset(s, 0, sizeof(s));
         ssize_t numRead = read(from, s, sizeof(s));
         if (numRead < 0) {
-            if (errno != EAGAIN && onerror != nullptr) {
+            if (errno != EAGAIN) {
                 onerror(from);
             }
             break;
@@ -376,7 +376,8 @@ void sendCommand(int sockfd, char * cmd) {
         markNonblock(STDIN_FILENO);
     }
 
-    while (true) {
+    bool connected = true;
+    while (connected) {
         // prepare readset
         FD_ZERO(&readset);                     // clear the set
         FD_SET(sockfd, &readset);              // add listening socket to the set
@@ -398,8 +399,9 @@ void sendCommand(int sockfd, char * cmd) {
             }
             // is that an incoming connection from the listening socket?
             if (FD_ISSET(sockfd, &readset)) {
-                proxy(sockfd, STDOUT_FILENO, CLIENT, (char*) "Daemon", [](int from) {
+                proxy(sockfd, STDOUT_FILENO, CLIENT, (char*) "Daemon", [&connected](int from) {
                     LogI(CLIENT, "Daemon has just disconnected us :(");
+                    connected = false;
                 });
             }
         }
