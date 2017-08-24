@@ -32,6 +32,10 @@ char *shell = nullptr;
 
 auto nothing = [](int from){};
 
+void doClose(int fd) {
+    LogV(DAEMON, "Closing fd %d", fd);
+    close(fd);
+}
 /**
  * Mark a certain file descriptor nonblocking
  */
@@ -43,10 +47,47 @@ void markNonblock(int fd) {
 }
 
 /**
+ * Get actor name from an FD
+ */
+void getActorNameByFd(int fd, char *actorName, char *logPrefix) {
+    actorName[0] = 0;
+    logPrefix[0] = 0;
+    if (fd == STDIN_FILENO) {
+        strcat(actorName, ACTOR_STDIN);
+        strcat(logPrefix, CLIENT);
+    }
+    else if (fd == STDOUT_FILENO) {
+        strcat(actorName, ACTOR_STDOUT);
+        strcat(logPrefix, DAEMON);
+    }
+    else {
+        for (int i = 0; i < MAX_CLIENT; i++) {
+            if (clients[i].fd) {
+                if (fd == clients[i].fd) {
+                    sprintf(actorName, "%s %d", ACTOR_CLIENT, fd);
+                    strcat(logPrefix, DAEMON);
+                    break;
+                }
+                else if (fd == clients[i].out[0]) {
+                    sprintf(actorName, "%s %d", ACTOR_CHILD, clients[i].pid);
+                    strcat(logPrefix, DAEMON);
+                }
+            }
+        }
+    }
+    if (!strlen(actorName)) {
+        strcat(actorName, ACTOR_DAEMON);
+        strcat(logPrefix, CLIENT);
+    }
+}
+
+/**
  * Read all possible data from one file descriptor and write to the other
  */
-template <typename F> void proxy(int from, int to, char *logPrefix, char *fromActor, F onerror) {
+template <typename F> void proxy(int from, int to, F onerror) {
     char s[1024];
+    char actorName[32];
+    char log[16];
     bool firstLoop = true;
     while (true) {
         memset(s, 0, sizeof(s));
@@ -64,10 +105,13 @@ template <typename F> void proxy(int from, int to, char *logPrefix, char *fromAc
             break;
         }
 
-        if (fromActor) {
-            LogI(logPrefix, "%s says %s", fromActor, s);
-        }
+        getActorNameByFd(from, actorName, log);
+        LogI(log, "%s says %s", actorName, s);
+
         write(to, s, (size_t) numRead);
+        /*for (int i = 0; i < numRead; i++) {
+            if (s[i] == '\n') s[i]='%';
+        }*/
         firstLoop = false;
     }
 }
@@ -133,7 +177,9 @@ void disconnectDeadClient() {
             close(clients[i].out[0]);
             close(clients[i].out[1]);
             close(clients[i].fd);
+            LogI(DAEMON, "Closing following fds: %d %d %d %d %d", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].fd);
             clients[i].died = 0;
+            clients[i].pid = 0;
             clients[i].fd = 0;
         }
     }
@@ -278,24 +324,23 @@ void acceptClients(int sockfd) {
                 // is that data from a child? forward to the client
                 if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
                     // forward to the client
-                    proxy(clients[i].out[0], clients[i].fd, DAEMON, (char*) "Child", nothing);
+                    proxy(clients[i].out[0], clients[i].fd, nothing);
                 }
 
                 // is that data from a previously-connect client?
                 if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, &readset)) {
                     // forward to the corresponding child's stdin
-                    proxy(clients[i].fd, clients[i].in[1], DAEMON, (char*) "Client", [](int from) {
+                    proxy(clients[i].fd, clients[i].in[1], [](int from) {
                         // some error. remove it from the "active" fd array
                         LogI(DAEMON, " - Client %d has disconnected.", from);
                         shutdown(from, SHUT_RDWR);
-                        close(from);
+                        doClose(from);
 
                         // find the child
                         for (int j = 0; j < MAX_CLIENT; j++) {
                             if (clients[j].fd == from) {
                                 // kill the child
                                 kill(clients[j].pid, SIGKILL);
-                                clients[j].fd = 0;
                                 break;
                             }
                         }
@@ -307,7 +352,7 @@ void acceptClients(int sockfd) {
         disconnectDeadClient();
     }
     // disconnect
-    close(sockfd);
+    doClose(sockfd);
 }
 
 /**
@@ -345,7 +390,7 @@ int connectToDaemon() {
     // connect to server
     if (connect(sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
         LogE(CLIENT, "Cannot connect to daemon");
-        close(sockfd);
+        doClose(sockfd);
         exit(1);
     }
 
@@ -395,11 +440,11 @@ void sendCommand(int sockfd, char * cmd) {
         if (selectVal > 0) {
             // is that from stdin? send to the socket
             if (cmd == nullptr && FD_ISSET(STDIN_FILENO, &readset)) {
-                proxy(STDIN_FILENO, sockfd, CLIENT, (char*) "Client stdin", nothing);
+                proxy(STDIN_FILENO, sockfd, nothing);
             }
             // is that an incoming connection from the listening socket?
             if (FD_ISSET(sockfd, &readset)) {
-                proxy(sockfd, STDOUT_FILENO, CLIENT, (char*) "Daemon", [&connected](int from) {
+                proxy(sockfd, STDOUT_FILENO, [&connected](int from) {
                     LogI(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
                 });
@@ -428,7 +473,7 @@ void goCommandMode(int argc, char **argv) {
     int sockfd = connectToDaemon();
     usleep(200*1000);
     sendCommand(sockfd, cmd);
-    close(sockfd);
+    doClose(sockfd);
 }
 
 /**
@@ -438,7 +483,7 @@ void goInteractiveMode() {
     LogI(CLIENT, "Interactive: Going interactive mode. PPID=%d", getppid());
     int sockfd = connectToDaemon();
     sendCommand(sockfd, nullptr);
-    close(sockfd);
+    doClose(sockfd);
 }
 
 /**

@@ -13,6 +13,12 @@
 #define CLIENT (char*) "TinySUClient"
 #define DAEMON (char*) "TinySUDaemon"
 
+#define ACTOR_STDIN (char*) "stdin"
+#define ACTOR_STDOUT (char*) "stdout"
+#define ACTOR_CLIENT (char*) "Client"
+#define ACTOR_DAEMON (char*) "Daemon"
+#define ACTOR_CHILD (char*) "Child"
+
 #ifdef ARM
     #define DEFAULT_SHELL (char*) "/system/bin/sh"
 #else
