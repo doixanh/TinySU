@@ -50,7 +50,7 @@ template <typename F> void proxy(int from, int to, char *logPrefix, char *fromAc
     bool firstLoop = true;
     while (true) {
         memset(s, 0, sizeof(s));
-        ssize_t numRead = read(from, s, sizeof(s));
+        ssize_t numRead = read(from, s, sizeof(s) - 1);
         if (numRead < 0) {
             if (errno != EAGAIN) {
                 onerror(from);
@@ -368,7 +368,7 @@ void sendCommand(int sockfd, char * cmd) {
 
     if (cmd != nullptr) {
         LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
-        strcat(cmd, "\n");
+        strcat(cmd, "\nexit\n");
         write(sockfd, cmd, strlen(cmd));
     }
     else {
