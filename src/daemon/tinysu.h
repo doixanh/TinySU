@@ -15,6 +15,7 @@
 
 #define ACTOR_STDIN (char*) "stdin"
 #define ACTOR_STDOUT (char*) "stdout"
+#define ACTOR_STDERR (char*) "stderr"
 #define ACTOR_CLIENT (char*) "Client"
 #define ACTOR_DAEMON (char*) "Daemon"
 #define ACTOR_CHILD (char*) "Child"
@@ -43,6 +44,7 @@ typedef struct client {
     int pid;
     int in[2];
     int out[2];
+    int err[2];
     int pendingData;
     int died;
 } client_t;

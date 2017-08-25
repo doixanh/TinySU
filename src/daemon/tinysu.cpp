@@ -40,7 +40,6 @@ void doClose(int fd) {
  * Mark a certain file descriptor nonblocking
  */
 void markNonblock(int fd) {
-    // make it nonblock as well
     int fl = fcntl(fd, F_GETFL, 0);
     fl |= O_NONBLOCK;
     fcntl(fd, F_SETFL, fl);
@@ -58,6 +57,10 @@ void getActorNameByFd(int fd, char *actorName, char *logPrefix) {
     }
     else if (fd == STDOUT_FILENO) {
         strcat(actorName, ACTOR_STDOUT);
+        strcat(logPrefix, DAEMON);
+    }
+    else if (fd == STDERR_FILENO) {
+        strcat(actorName, ACTOR_STDERR);
         strcat(logPrefix, DAEMON);
     }
     else {
@@ -109,9 +112,6 @@ template <typename F> void proxy(int from, int to, F onerror) {
         LogI(log, "%s says %s", actorName, s);
 
         write(to, s, (size_t) numRead);
-        /*for (int i = 0; i < numRead; i++) {
-            if (s[i] == '\n') s[i]='%';
-        }*/
         firstLoop = false;
     }
 }
@@ -129,7 +129,7 @@ void printUsage(char *self) {
  * Init a listening TCP socket
  */
 int initSocket() {
-    int sockfd, clen, clientfd;
+    int sockfd;
     struct sockaddr_in saddr = {};
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         LogE(DAEMON, "Error creating socket");
@@ -176,8 +176,10 @@ void disconnectDeadClient() {
             close(clients[i].in[1]);
             close(clients[i].out[0]);
             close(clients[i].out[1]);
+            close(clients[i].err[0]);
+            close(clients[i].err[1]);
             close(clients[i].fd);
-            LogI(DAEMON, "Closing following fds: %d %d %d %d %d", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].fd);
+            LogI(DAEMON, "Closing following fds: %d %d %d %d %d", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd);
             clients[i].died = 0;
             clients[i].pid = 0;
             clients[i].fd = 0;
@@ -207,10 +209,8 @@ void acceptClients(int sockfd) {
     unsigned int clen = sizeof(caddr);
     fd_set readset;
     int i;
-    int fl;
     int clientfd;
     int clientpid;
-    char s[1024];
     struct timeval timeout = {10, 0};
 
     memset(&timeout, 0, sizeof(timeout));
@@ -226,7 +226,6 @@ void acceptClients(int sockfd) {
     // wait for max 10s for incoming su command
     LogI(DAEMON, "Accepting clients on sock %d", sockfd);
 
-
     while (clen > 0) {
         FD_ZERO(&readset);                    // clear the set
         FD_SET(sockfd, &readset);            // add listening socket to the set
@@ -240,6 +239,8 @@ void acceptClients(int sockfd) {
                 if (clients[i].fd > maxfd) maxfd = clients[i].fd;
                 FD_SET(clients[i].out[0], &readset);
                 if (clients[i].out[0] > maxfd) maxfd = clients[i].out[0];
+                FD_SET(clients[i].err[0], &readset);
+                if (clients[i].err[0] > maxfd) maxfd = clients[i].err[0];
             }
         }
 
@@ -278,9 +279,11 @@ void acceptClients(int sockfd) {
                             clients[i].fd = clientfd;
                             pipe(clients[i].in);
                             pipe(clients[i].out);
+                            pipe(clients[i].err);
 
                             markNonblock(clients[i].in[0]);
                             markNonblock(clients[i].out[0]);
+                            markNonblock(clients[i].err[0]);
 
                             clientIdx = i;
                             break;
@@ -299,7 +302,7 @@ void acceptClients(int sockfd) {
                         // redirect
                         dup2(clients[i].in[0], STDIN_FILENO);           // child input to stdin pipe 0
                         dup2(clients[i].out[1], STDOUT_FILENO);         // child output to stdout pipe 1
-                        dup2(clients[i].out[1], STDERR_FILENO);         // child err to stdout pipe 1
+                        dup2(clients[i].err[1], STDERR_FILENO);         // child err to stderr pipe 1
 
                         setenv("HOME", "/sdcard", 1);
                         setenv("SHELL", DEFAULT_SHELL, 1);
@@ -429,7 +432,7 @@ void sendCommand(int sockfd, char * cmd) {
         FD_SET(STDIN_FILENO, &readset);   // add stdin to the set
 
         // pool and wait for 1s max
-        timeout.tv_sec = 50;
+        timeout.tv_sec = 5;
         int selectVal = select(sockfd + 1, &readset, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
             // error
@@ -452,6 +455,8 @@ void sendCommand(int sockfd, char * cmd) {
         }
         else if (selectVal == 0) {
             LogI(CLIENT, "Nothing is ready for select()");
+            LogI(CLIENT, "Writing an empty line");
+            printf("\n");
         }
     }
     fflush(stdout);
