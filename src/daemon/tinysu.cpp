@@ -122,7 +122,8 @@ template <typename F> void proxy(int from, int to, F onerror) {
  * Show some help.
  */
 void printUsage(char *self) {
-    printf("This is TinySU ver %s.\n", TINYSU_VER_STR);
+    printf("This is TinySU ver %s by doixanh.\n", TINYSU_VER_STR);
+    printf("https://github.com/doixanh/TinySU\n");
     printf("Usage: %s -hdvV [-c command]\n", self);
     exit(0);
 }
@@ -173,7 +174,7 @@ int initSocket(int port) {
 void disconnectDeadClients() {
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].died) {
-            LogI(DAEMON, "Child %d died, disconnecting client %d", clients[i].pid, clients[i].fd);
+            LogI(DAEMON, " - Child %d died, disconnecting client %d", clients[i].pid, clients[i].fd);
             close(clients[i].in[0]);
             close(clients[i].in[1]);
             close(clients[i].out[0]);
@@ -181,7 +182,7 @@ void disconnectDeadClients() {
             close(clients[i].err[0]);
             close(clients[i].err[1]);
             close(clients[i].fd);
-            LogI(DAEMON, "Closing following fds: %d %d %d %d %d", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd);
+            LogI(DAEMON, " - Closing following fds: %d %d %d %d %d %d %d", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd);
             clients[i].died = 0;
             clients[i].pid = 0;
             clients[i].fd = 0;
@@ -195,7 +196,7 @@ void handleSignals(int signum, siginfo_t *info, void *ptr)  {
     if (signum == SIGCHLD) {
         for (int i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].pid == info->si_pid) {
-                LogI(DAEMON, "Child %d is killed. ", clients[i].pid);
+                LogI(DAEMON, " - Child %d is killed. ", clients[i].pid);
                 clients[i].died = 1;
                 break;
             }
@@ -207,13 +208,13 @@ void handleSignals(int signum, siginfo_t *info, void *ptr)  {
  * Add all possible file descriptors to a readset for later select()
  */
 int addDaemonFdsToReadset(int sockfd, fd_set *readset) {
-    int maxfd = 0;
-    FD_ZERO(&readset);                    // clear the set
+    FD_ZERO(readset);                     // clear the set
     FD_SET(sockfd, readset);              // add listening socket to the set
+    int maxfd = sockfd;
 
     // add all clientfds into the reading set
     for (int i = 0; i < MAX_CLIENT; i++) {
-        if (clients[i].fd > 0) {
+        if (clients[i].fd > 0 && !clients[i].died) {
             FD_SET(clients[i].fd, readset);    // add a FD into the set
             if (clients[i].fd > maxfd) maxfd = clients[i].fd;
             FD_SET(clients[i].out[0], readset);
@@ -306,13 +307,14 @@ void daemonForward(fd_set *readset) {
                 // some error. remove it from the "active" fd array
                 LogI(DAEMON, " - Client %d has disconnected.", from);
                 shutdown(from, SHUT_RDWR);
-                doClose(from);
+                // we dont close from here, we will do it in disconnectDeadClients();
 
                 // find the child
                 for (int j = 0; j < MAX_CLIENT; j++) {
                     if (clients[j].fd == from) {
                         // kill the child
                         kill(clients[j].pid, SIGKILL);
+                        clients[j].died = 1;
                         break;
                     }
                 }
