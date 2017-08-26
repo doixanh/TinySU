@@ -41,6 +41,7 @@
 
 typedef struct client {
     int fd;
+    int errSockfd;
     int pid;
     int in[2];
     int out[2];

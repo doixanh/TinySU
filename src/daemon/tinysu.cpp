@@ -28,6 +28,8 @@
 #include "tinysu.h"
 
 client_t clients[MAX_CLIENT];
+int errSockfds[MAX_CLIENT];
+
 char *shell = nullptr;
 
 auto nothing = [](int from){};
@@ -128,7 +130,7 @@ void printUsage(char *self) {
 /**
  * Init a listening TCP socket
  */
-int initSocket() {
+int initSocket(int port) {
     int sockfd;
     struct sockaddr_in saddr = {};
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -146,7 +148,7 @@ int initSocket() {
     memset(&saddr, 0, sizeof(saddr));
     saddr.sin_family = AF_INET;
     saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    saddr.sin_port = htons(TINYSU_PORT);
+    saddr.sin_port = htons(port);
     if (bind(sockfd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) {
         LogE(DAEMON, "Error binding socket");
         exit(1);
@@ -168,7 +170,7 @@ int initSocket() {
  * Disconnect all clients that are associated with 'marked' died children
  * Closing the pipes to the children too.
  */
-void disconnectDeadClient() {
+void disconnectDeadClients() {
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].died) {
             LogI(DAEMON, "Child %d died, disconnecting client %d", clients[i].pid, clients[i].fd);
@@ -202,15 +204,155 @@ void handleSignals(int signum, siginfo_t *info, void *ptr)  {
 }
 
 /**
- * Accept incoming connection
+ * Add all possible file descriptors to a readset for later select()
  */
-void acceptClients(int sockfd) {
+int addDaemonFdsToReadset(int sockfd, fd_set *readset) {
+    int maxfd = 0;
+    FD_ZERO(&readset);                    // clear the set
+    FD_SET(sockfd, readset);              // add listening socket to the set
+
+    // add all clientfds into the reading set
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        if (clients[i].fd > 0) {
+            FD_SET(clients[i].fd, readset);    // add a FD into the set
+            if (clients[i].fd > maxfd) maxfd = clients[i].fd;
+            FD_SET(clients[i].out[0], readset);
+            if (clients[i].out[0] > maxfd) maxfd = clients[i].out[0];
+            FD_SET(clients[i].err[0], readset);
+            if (clients[i].err[0] > maxfd) maxfd = clients[i].err[0];
+        }
+    }
+    return maxfd;
+}
+
+/**
+ * Add a clientfd to the #clients list
+ * Create pipe to communicate with its corresponding child
+ */
+int addClientToList(int clientfd) {
+    markNonblock(clientfd);
+
+    // add it to the client array so that we can include it in client fdset
+    int clientIdx = -1;
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        if (clients[i].fd == 0) {
+            clients[i].fd = clientfd;
+            pipe(clients[i].in);
+            pipe(clients[i].out);
+            pipe(clients[i].err);
+
+            markNonblock(clients[i].in[0]);
+            markNonblock(clients[i].out[0]);
+            markNonblock(clients[i].err[0]);
+
+            clientIdx = i;
+            break;
+        }
+    }
+    return clientIdx;
+}
+
+/**
+ * Exec a shell to serve a client. Redirect stdin/stdout/stderr of the child to 3 pipes.
+ * We will forward these data to the client using these pipes.
+ */
+void execShell(int clientIdx) {
+    // we are child.
+    char *argv[2];
+    int argc = 0;
+    argv[argc++] = DEFAULT_SHELL;
+    argv[argc] = nullptr;
+
+    // redirect
+    dup2(clients[clientIdx].in[0], STDIN_FILENO);           // child input to stdin pipe 0
+    dup2(clients[clientIdx].out[1], STDOUT_FILENO);         // child output to stdout pipe 1
+    dup2(clients[clientIdx].err[1], STDERR_FILENO);         // child err to stderr pipe 1
+
+    setenv("HOME", "/sdcard", 1);
+    setenv("SHELL", DEFAULT_SHELL, 1);
+    setenv("USER", "root", 1);
+    setenv("LOGNAME", "root", 1);
+#ifdef ARM
+    setexeccon("u:r:su:s0");
+#endif
+    execvp(argv[0], argv);
+
+    // if code goes here, meaning we have problems with execvp
+    LogE(DAEMON, "Error execvp");
+    exit(1);
+}
+
+/**
+ * Forward data between children and clients
+ */
+void daemonForward(fd_set *readset) {
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        // is that data from a child stdout? forward to the client stdout
+        if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], readset)) {
+            // forward to the client
+            proxy(clients[i].out[0], clients[i].fd, nothing);
+        }
+
+        // is that data from a child stderr? forward to the client stderr
+        if (clients[i].fd > 0 && FD_ISSET(clients[i].err[0], readset)) {
+            // forward to the client
+            proxy(clients[i].err[0], clients[i].fd, nothing);
+        }
+
+        // is that data from a previously-connect client?
+        if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, readset)) {
+            // forward to the corresponding child's stdin
+            proxy(clients[i].fd, clients[i].in[1], [](int from) {
+                // some error. remove it from the "active" fd array
+                LogI(DAEMON, " - Client %d has disconnected.", from);
+                shutdown(from, SHUT_RDWR);
+                doClose(from);
+
+                // find the child
+                for (int j = 0; j < MAX_CLIENT; j++) {
+                    if (clients[j].fd == from) {
+                        // kill the child
+                        kill(clients[j].pid, SIGKILL);
+                        break;
+                    }
+                }
+            });
+        }
+    }
+}
+
+/**
+ * Accept incoming connections
+ */
+void acceptClient(int sockfd) {
     struct sockaddr_in caddr;
     unsigned int clen = sizeof(caddr);
-    fd_set readset;
-    int i;
     int clientfd;
     int clientpid;
+    memset(&caddr, 0, sizeof(caddr));
+    clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
+    if (clientfd > 0) {
+        LogI(DAEMON, "New client %d", clientfd);
+        int clientIdx = addClientToList(clientfd);
+
+        // pre-fork
+        clientpid = fork();
+        if (clientpid == 0) {
+            execShell(clientIdx);
+        }
+        else {
+            // save pid to the list
+            clients[clientIdx].pid = clientpid;
+        }
+    }
+}
+
+/**
+ * Wait and serve all clients
+ */
+void serveClients(int sockfd, int errSockfd) {
+    fd_set readset;
+
     struct timeval timeout = {10, 0};
 
     memset(&timeout, 0, sizeof(timeout));
@@ -226,23 +368,8 @@ void acceptClients(int sockfd) {
     // wait for max 10s for incoming su command
     LogI(DAEMON, "Accepting clients on sock %d", sockfd);
 
-    while (clen > 0) {
-        FD_ZERO(&readset);                    // clear the set
-        FD_SET(sockfd, &readset);            // add listening socket to the set
-
-        int maxfd = sockfd;                    // maxfd will be used for select()
-
-        // add all clientfds into the reading set
-        for (i = 0; i < MAX_CLIENT; i++) {
-            if (clients[i].fd > 0) {
-                FD_SET(clients[i].fd, &readset);    // add a FD into the set
-                if (clients[i].fd > maxfd) maxfd = clients[i].fd;
-                FD_SET(clients[i].out[0], &readset);
-                if (clients[i].out[0] > maxfd) maxfd = clients[i].out[0];
-                FD_SET(clients[i].err[0], &readset);
-                if (clients[i].err[0] > maxfd) maxfd = clients[i].err[0];
-            }
-        }
+    while (true) {
+        int maxfd = addDaemonFdsToReadset(sockfd, &readset);
 
         // pool and wait for 10s max
         timeout.tv_sec = 10;
@@ -254,108 +381,22 @@ void acceptClients(int sockfd) {
             }
             else {
                 // select was interrupted, probably by SIGCHLD.
-                disconnectDeadClient();
+                disconnectDeadClients();
             }
         }
-
-        if (selectVal == 0) {
+        else if (selectVal == 0) {
             LogI(DAEMON, "Nothing for daemon select()");
         }
         else if (selectVal > 0) {
             // is that an incoming connection from the listening socket?
             if (FD_ISSET(sockfd, &readset)) {
-                memset(&caddr, 0, sizeof(caddr));
-                clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
-                if (clientfd >= 0) {
-                    LogI(DAEMON, "New client %d", clientfd);
-
-                    // make it nonblock as well
-                    markNonblock(clientfd);
-
-                    // add it to the client array so that we can include it in client fdset
-                    int clientIdx = -1;
-                    for (i = 0; i < MAX_CLIENT; i++) {
-                        if (clients[i].fd == 0) {
-                            clients[i].fd = clientfd;
-                            pipe(clients[i].in);
-                            pipe(clients[i].out);
-                            pipe(clients[i].err);
-
-                            markNonblock(clients[i].in[0]);
-                            markNonblock(clients[i].out[0]);
-                            markNonblock(clients[i].err[0]);
-
-                            clientIdx = i;
-                            break;
-                        }
-                    }
-
-                    // pre-fork
-                    clientpid = fork();
-                    if (clientpid == 0) {
-                        // we are child.
-                        char *argv[2];
-                        int argc = 0;
-                        argv[argc++] = DEFAULT_SHELL;
-                        argv[argc] = nullptr;
-
-                        // redirect
-                        dup2(clients[i].in[0], STDIN_FILENO);           // child input to stdin pipe 0
-                        dup2(clients[i].out[1], STDOUT_FILENO);         // child output to stdout pipe 1
-                        dup2(clients[i].err[1], STDERR_FILENO);         // child err to stderr pipe 1
-
-                        setenv("HOME", "/sdcard", 1);
-                        setenv("SHELL", DEFAULT_SHELL, 1);
-                        setenv("USER", "root", 1);
-                        setenv("LOGNAME", "root", 1);
-#ifdef ARM
-                        setexeccon("u:r:su:s0");
-#endif
-                        execvp(argv[0], argv);
-
-                        // if code goes here, meaning we have problems with execvp
-                        LogE(DAEMON, "Error execvp");
-                        exit(1);
-                    } else {
-                        // save pid to the list
-                        clients[clientIdx].pid = clientpid;
-                    }
-                }
+                acceptClient(sockfd);
             }
-
-            for (i = 0; i < MAX_CLIENT; i++) {
-                // is that data from a child? forward to the client
-                if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], &readset)) {
-                    // forward to the client
-                    proxy(clients[i].out[0], clients[i].fd, nothing);
-                }
-
-                // is that data from a previously-connect client?
-                if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, &readset)) {
-                    // forward to the corresponding child's stdin
-                    proxy(clients[i].fd, clients[i].in[1], [](int from) {
-                        // some error. remove it from the "active" fd array
-                        LogI(DAEMON, " - Client %d has disconnected.", from);
-                        shutdown(from, SHUT_RDWR);
-                        doClose(from);
-
-                        // find the child
-                        for (int j = 0; j < MAX_CLIENT; j++) {
-                            if (clients[j].fd == from) {
-                                // kill the child
-                                kill(clients[j].pid, SIGKILL);
-                                break;
-                            }
-                        }
-                    });
-                }
-            }
+            // is that data from children or clients?
+            daemonForward(&readset);
         }
-
-        disconnectDeadClient();
+        disconnectDeadClients();
     }
-    // disconnect
-    doClose(sockfd);
 }
 
 /**
@@ -364,9 +405,10 @@ void acceptClients(int sockfd) {
 void goDaemonMode() {
     LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
     LogI(DAEMON, "Operating in daemon mode.");
-    int sockfd = initSocket();
-    memset(&clients, 0, sizeof(clients));
-    acceptClients(sockfd);
+    int sockfd = initSocket(TINYSU_PORT);
+    memset(clients, 0, sizeof(clients));
+    memset(errSockfds, 0, sizeof(errSockfds));
+    serveClients(sockfd, 0);
     exit(0);
 }
 
@@ -409,7 +451,6 @@ int connectToDaemon() {
  * @param cmd command to send. if nullptr, get command from stdin
  */
 void sendCommand(int sockfd, char * cmd) {
-    char buf[1024];
     fd_set readset;
     struct timeval timeout = {};
     memset(&timeout, 0, sizeof(timeout));
@@ -427,11 +468,11 @@ void sendCommand(int sockfd, char * cmd) {
     bool connected = true;
     while (connected) {
         // prepare readset
-        FD_ZERO(&readset);                     // clear the set
-        FD_SET(sockfd, &readset);              // add listening socket to the set
-        FD_SET(STDIN_FILENO, &readset);   // add stdin to the set
+        FD_ZERO(&readset);                      // clear the set
+        FD_SET(sockfd, &readset);               // add listening socket to the set
+        FD_SET(STDIN_FILENO, &readset);         // add stdin to the set
 
-        // pool and wait for 1s max
+        // pool and wait
         timeout.tv_sec = 5;
         int selectVal = select(sockfd + 1, &readset, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
@@ -445,8 +486,9 @@ void sendCommand(int sockfd, char * cmd) {
             if (cmd == nullptr && FD_ISSET(STDIN_FILENO, &readset)) {
                 proxy(STDIN_FILENO, sockfd, nothing);
             }
-            // is that an incoming connection from the listening socket?
+            // is that an incoming connection from the connected socket?
             if (FD_ISSET(sockfd, &readset)) {
+                // forward to stdout
                 proxy(sockfd, STDOUT_FILENO, [&connected](int from) {
                     LogI(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
@@ -455,8 +497,6 @@ void sendCommand(int sockfd, char * cmd) {
         }
         else if (selectVal == 0) {
             LogI(CLIENT, "Nothing is ready for select()");
-            LogI(CLIENT, "Writing an empty line");
-            printf("\n");
         }
     }
     fflush(stdout);
