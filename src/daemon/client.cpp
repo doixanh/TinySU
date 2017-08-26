@@ -12,14 +12,15 @@
 #include "client.h"
 
 int clientId;
+int daemonFd;
+int daemonErrFd;
+
 /**
- * Connect to the daemon
- * @return sockfd
+ * Connect to the daemon, both on regular port and stderr port
  */
-int connectToDaemon() {
+void connectToDaemon() {
     char s[16];
     struct sockaddr_in saddr = {};
-    int daemonFd;
 
     // create the socket
     if ((daemonFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -39,6 +40,7 @@ int connectToDaemon() {
         doClose(daemonFd);
         exit(1);
     }
+    LogV(CLIENT, "daemonFd=%d", daemonFd);
 
     // wait for our id
     memset(s, 0, sizeof(s));
@@ -46,11 +48,35 @@ int connectToDaemon() {
     clientId = atoi(s);
     LogI(CLIENT, "Our id is %d", clientId);
 
-    // make it nonblocking
+
+
+    // create the stderr socket
+    if ((daemonErrFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        LogE(CLIENT, "Error creating err socket");
+        exit(1);
+    }
+
+    // init sockaddr
+    memset(&saddr, 0, sizeof(saddr));
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    saddr.sin_port = htons(TINYSU_PORT_ERR);
+
+    // connect to server on stderr socket
+    if (connect(daemonErrFd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
+        LogE(CLIENT, "Cannot connect to daemon");
+        doClose(daemonErrFd);
+        exit(1);
+    }
+    LogV(CLIENT, "daemonErrFd=%d", daemonErrFd);
+    int numWrite = write(daemonErrFd, s, strlen(s));
+    LogV(CLIENT, "Sent our id to stderr socket as %s, len=%d", s, numWrite);
+
+    // make them nonblocking
     markNonblock(daemonFd);
+    markNonblock(daemonErrFd);
 
     LogV(CLIENT, "Connected successfully!");
-    return daemonFd;
 }
 
 /**
@@ -76,12 +102,14 @@ void sendCommand(int daemonFd, char *cmd) {
     while (connected) {
         // prepare readSet
         FD_ZERO(&readSet);                      // clear the set
-        FD_SET(daemonFd, &readSet);               // add listening socket to the set
+        FD_SET(daemonFd, &readSet);             // add listening socket to the set
+        FD_SET(daemonErrFd, &readSet);          // add listening socket to the set
         FD_SET(STDIN_FILENO, &readSet);         // add stdin to the set
+        int maxFd = daemonFd > daemonErrFd ? daemonFd : daemonErrFd;
 
         // pool and wait
         timeout.tv_sec = 5;
-        int selectVal = select(daemonFd + 1, &readSet, nullptr, nullptr, &timeout);
+        int selectVal = select(maxFd + 1, &readSet, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
             // error
             break;
@@ -122,7 +150,7 @@ void goCommandMode(int argc, char **argv) {
         strcat(cmd, argv[i]);
         strcat(cmd, " ");
     }
-    int daemonFd = connectToDaemon();
+    connectToDaemon();
     usleep(200*1000);
     sendCommand(daemonFd, cmd);
     doClose(daemonFd);
@@ -133,7 +161,7 @@ void goCommandMode(int argc, char **argv) {
  */
 void goInteractiveMode() {
     LogI(CLIENT, "Interactive: Going interactive mode. PPID=%d", getppid());
-    int daemonFd = connectToDaemon();
+    connectToDaemon();
     sendCommand(daemonFd, nullptr);
     doClose(daemonFd);
 }

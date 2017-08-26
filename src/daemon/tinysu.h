@@ -59,7 +59,6 @@ typedef struct client {
 
 // shared variables
 extern client_t clients[MAX_CLIENT];
-extern int clientErrFds[MAX_CLIENT];
 auto nothing = [](int from){};
 
 // utility functions

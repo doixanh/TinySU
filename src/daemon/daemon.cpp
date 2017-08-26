@@ -14,6 +14,9 @@
 #include "tinysu.h"
 #include "daemon.h"
 
+int listenFd;
+int listenErrFd;
+
 /**
  * Signal handler. Mainly used to process SIGCHLD from children
  */
@@ -72,10 +75,6 @@ int initListeningSocket(int port) {
         LogE(DAEMON, "Error listening to socket");
         exit(1);
     }
-
-    // init arrays
-    memset(clients, 0, sizeof(clients));
-
     return sockfd;
 }
 
@@ -105,10 +104,14 @@ void disconnectDeadClients() {
 /**
  * Add all possible file descriptors to a readset for later select()
  */
-int addDaemonFdsToReadset(int sockfd, fd_set *readset) {
+int addDaemonFdsToReadset(fd_set *readset) {
     FD_ZERO(readset);                     // clear the set
-    FD_SET(sockfd, readset);              // add listening socket to the set
-    int maxfd = sockfd;
+    FD_SET(listenFd, readset);            // add listening socket to the set
+    FD_SET(listenErrFd, readset);         // add listening socket to the set
+    int maxfd = listenFd;
+    if (maxfd < listenErrFd) {
+        maxfd = listenErrFd;
+    }
 
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].fd > 0 && !clients[i].died) {
@@ -257,20 +260,31 @@ void acceptClient(int listenFd) {
  * Accept incoming connections
  */
 void acceptClientErr(int listenErrFd) {
+    char s[16];
     struct sockaddr_in caddr;
     unsigned int clen = sizeof(caddr);
+    int clientId;
     int clientErrFd;
     memset(&caddr, 0, sizeof(caddr));
     clientErrFd = accept(listenErrFd, (struct sockaddr *) &caddr, &clen);
     if (clientErrFd > 0) {
         LogI(DAEMON, "New connection for stderr %d", clientErrFd);
+
+        // wait for id from client
+        memset(s, 0, sizeof(s));
+        int numRead = read(clientErrFd, s, strlen(s));
+        LogV(DAEMON, "Received len=%d, client id %s", numRead, s);
+        clientId = atoi(s);
+
         for (int i = 0; i < MAX_CLIENT; i++) {
-            if (clientErrFds[i] == 0) {
-                clientErrFds[i] = clientErrFd;
+            if (clients[i].fd == clientId) {
+                LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
+                clients[i].errFd = clientErrFd;
                 return;
             }
         }
     }
+
 }
 
 /**
@@ -284,7 +298,7 @@ void serveClients(int listenFd, int listenErrFd) {
     LogI(DAEMON, "Accepting clients on sock %d and sockErr %d", listenFd, listenErrFd);
 
     while (true) {
-        int maxfd = addDaemonFdsToReadset(listenFd, &readSet);
+        int maxfd = addDaemonFdsToReadset(&readSet);
 
         // pool and wait
         timeout.tv_sec = 10;
@@ -324,9 +338,8 @@ void serveClients(int listenFd, int listenErrFd) {
 void goDaemonMode() {
     LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
     LogI(DAEMON, "Operating in daemon mode.");
-    int listenFd = initListeningSocket(TINYSU_PORT);
-    int listenErrFd = initListeningSocket(TINYSU_PORT_ERR);
     memset(clients, 0, sizeof(clients));
-    memset(clientErrFds, 0, sizeof(clientErrFds));
+    listenFd = initListeningSocket(TINYSU_PORT);
+    listenErrFd = initListeningSocket(TINYSU_PORT_ERR);
     serveClients(listenFd, listenErrFd);
 }
