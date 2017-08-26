@@ -17,10 +17,10 @@
  */
 int connectToDaemon() {
     struct sockaddr_in saddr = {};
-    int sockfd;
+    int daemonFd;
 
     // create the socket
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((daemonFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         LogE(CLIENT, "Error creating socket");
         exit(1);
     }
@@ -32,32 +32,32 @@ int connectToDaemon() {
     saddr.sin_port = htons(TINYSU_PORT);
 
     // connect to server
-    if (connect(sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
+    if (connect(daemonFd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
         LogE(CLIENT, "Cannot connect to daemon");
-        doClose(sockfd);
+        doClose(daemonFd);
         exit(1);
     }
 
     // make it nonblocking
-    markNonblock(sockfd);
+    markNonblock(daemonFd);
 
     LogV(CLIENT, "Connected successfully!");
-    return sockfd;
+    return daemonFd;
 }
 
 /**
  * Send command to server and wait for response.
  * @param cmd command to send. if nullptr, get command from stdin
  */
-void sendCommand(int sockfd, char * cmd) {
-    fd_set readset;
+void sendCommand(int daemonFd, char *cmd) {
+    fd_set readSet;
     struct timeval timeout = {};
     memset(&timeout, 0, sizeof(timeout));
 
     if (cmd != nullptr) {
         LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
         strcat(cmd, "\nexit\n");
-        write(sockfd, cmd, strlen(cmd));
+        write(daemonFd, cmd, strlen(cmd));
     }
     else {
         // make stdin nonblocking
@@ -66,14 +66,14 @@ void sendCommand(int sockfd, char * cmd) {
 
     bool connected = true;
     while (connected) {
-        // prepare readset
-        FD_ZERO(&readset);                      // clear the set
-        FD_SET(sockfd, &readset);               // add listening socket to the set
-        FD_SET(STDIN_FILENO, &readset);         // add stdin to the set
+        // prepare readSet
+        FD_ZERO(&readSet);                      // clear the set
+        FD_SET(daemonFd, &readSet);               // add listening socket to the set
+        FD_SET(STDIN_FILENO, &readSet);         // add stdin to the set
 
         // pool and wait
         timeout.tv_sec = 5;
-        int selectVal = select(sockfd + 1, &readset, nullptr, nullptr, &timeout);
+        int selectVal = select(daemonFd + 1, &readSet, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
             // error
             break;
@@ -82,13 +82,13 @@ void sendCommand(int sockfd, char * cmd) {
         // anything happened?
         if (selectVal > 0) {
             // is that from stdin? send to the socket
-            if (cmd == nullptr && FD_ISSET(STDIN_FILENO, &readset)) {
-                proxy(STDIN_FILENO, sockfd, nothing);
+            if (cmd == nullptr && FD_ISSET(STDIN_FILENO, &readSet)) {
+                proxy(STDIN_FILENO, daemonFd, nothing);
             }
             // is that an incoming connection from the connected socket?
-            if (FD_ISSET(sockfd, &readset)) {
+            if (FD_ISSET(daemonFd, &readSet)) {
                 // forward to stdout
-                proxy(sockfd, STDOUT_FILENO, [&connected](int from) {
+                proxy(daemonFd, STDOUT_FILENO, [&connected](int from) {
                     LogI(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
                 });
@@ -114,10 +114,10 @@ void goCommandMode(int argc, char **argv) {
         strcat(cmd, argv[i]);
         strcat(cmd, " ");
     }
-    int sockfd = connectToDaemon();
+    int daemonFd = connectToDaemon();
     usleep(200*1000);
-    sendCommand(sockfd, cmd);
-    doClose(sockfd);
+    sendCommand(daemonFd, cmd);
+    doClose(daemonFd);
 }
 
 /**
@@ -125,7 +125,7 @@ void goCommandMode(int argc, char **argv) {
  */
 void goInteractiveMode() {
     LogI(CLIENT, "Interactive: Going interactive mode. PPID=%d", getppid());
-    int sockfd = connectToDaemon();
-    sendCommand(sockfd, nullptr);
-    doClose(sockfd);
+    int daemonFd = connectToDaemon();
+    sendCommand(daemonFd, nullptr);
+    doClose(daemonFd);
 }

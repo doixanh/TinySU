@@ -13,6 +13,7 @@
 #define TINYSU_VER_STR "0.1"
 
 #define TINYSU_PORT 12385
+#define TINYSU_PORT_ERR 12386
 #define MAX_CLIENT 100
 
 #define ARG_LEN 10240
@@ -48,18 +49,17 @@
 // struct definitions
 typedef struct client {
     int fd;
-    int errSockfd;
+    int errFd;
     int pid;
     int in[2];
     int out[2];
     int err[2];
-    int pendingData;
     int died;
 } client_t;
 
 // shared variables
 extern client_t clients[MAX_CLIENT];
-extern int errSockfds[MAX_CLIENT];
+extern int clientErrFds[MAX_CLIENT];
 auto nothing = [](int from){};
 
 // utility functions

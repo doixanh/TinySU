@@ -20,7 +20,7 @@
 #include "client.h"
 
 client_t clients[MAX_CLIENT];
-int errSockfds[MAX_CLIENT];
+int clientErrFds[MAX_CLIENT];
 char *shell = nullptr;
 
 void doClose(int fd) {

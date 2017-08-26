@@ -15,6 +15,33 @@
 #include "daemon.h"
 
 /**
+ * Signal handler. Mainly used to process SIGCHLD from children
+ */
+void handleSignals(int signum, siginfo_t *info, void *ptr)  {
+    if (signum == SIGCHLD) {
+        for (int i = 0; i < MAX_CLIENT; i++) {
+            if (clients[i].pid == info->si_pid) {
+                LogI(DAEMON, " - Child %d is killed. ", clients[i].pid);
+                clients[i].died = 1;
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * Register signal handler to process child exits
+ */
+void registerSignalHandler() {
+    struct sigaction act = {};
+    memset(&act, 0, sizeof(act));
+    act.sa_sigaction = handleSignals;
+    act.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigaction(SIGCHLD, &act, nullptr);
+    LogV(DAEMON, "Registered signal handler.");
+}
+
+/**
  * Init a listening TCP socket
  */
 int initListeningSocket(int port) {
@@ -74,20 +101,6 @@ void disconnectDeadClients() {
         }
     }
 }
-/**
- * Signal handler. Mainly used to process SIGCHLD from children
- */
-void handleSignals(int signum, siginfo_t *info, void *ptr)  {
-    if (signum == SIGCHLD) {
-        for (int i = 0; i < MAX_CLIENT; i++) {
-            if (clients[i].pid == info->si_pid) {
-                LogI(DAEMON, " - Child %d is killed. ", clients[i].pid);
-                clients[i].died = 1;
-                break;
-            }
-        }
-    }
-}
 
 /**
  * Add all possible file descriptors to a readset for later select()
@@ -97,7 +110,6 @@ int addDaemonFdsToReadset(int sockfd, fd_set *readset) {
     FD_SET(sockfd, readset);              // add listening socket to the set
     int maxfd = sockfd;
 
-    // add all clientfds into the reading set
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].fd > 0 && !clients[i].died) {
             FD_SET(clients[i].fd, readset);    // add a FD into the set
@@ -113,16 +125,16 @@ int addDaemonFdsToReadset(int sockfd, fd_set *readset) {
 
 /**
  * Add a clientfd to the #clients list
- * Create pipe to communicate with its corresponding child
+ * Create pipes to communicate with its corresponding child
  */
-int addClientToList(int clientfd) {
-    markNonblock(clientfd);
+int addClientToList(int clientFd) {
+    markNonblock(clientFd);
 
     // add it to the client array so that we can include it in client fdset
     int clientIdx = -1;
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].fd == 0) {
-            clients[i].fd = clientfd;
+            clients[i].fd = clientFd;
             pipe(clients[i].in);
             pipe(clients[i].out);
             pipe(clients[i].err);
@@ -143,7 +155,6 @@ int addClientToList(int clientfd) {
  * We will forward these data to the client using these pipes.
  */
 void execShell(int clientIdx) {
-    // we are child.
     char *argv[2];
     int argc = 0;
     argv[argc++] = DEFAULT_SHELL;
@@ -211,25 +222,53 @@ void daemonForward(fd_set *readset) {
 /**
  * Accept incoming connections
  */
-void acceptClient(int sockfd) {
+void acceptClient(int listenFd) {
+    char s[16];
     struct sockaddr_in caddr;
     unsigned int clen = sizeof(caddr);
-    int clientfd;
-    int clientpid;
+    int clientFd;
+    int clientPid;
     memset(&caddr, 0, sizeof(caddr));
-    clientfd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
-    if (clientfd > 0) {
-        LogI(DAEMON, "New client %d", clientfd);
-        int clientIdx = addClientToList(clientfd);
+    clientFd = accept(listenFd, (struct sockaddr *) &caddr, &clen);
+    if (clientFd > 0) {
+        LogI(DAEMON, "New client %d", clientFd);
+
+        // welcome with its id
+        memset(s, 0, sizeof(s));
+        sprintf(s, "%d", clientFd);
+        write(clientFd, s, strlen(s));
+
+        int clientIdx = addClientToList(clientFd);
 
         // pre-fork
-        clientpid = fork();
-        if (clientpid == 0) {
+        clientPid = fork();
+        if (clientPid == 0) {
+            // we are child.
             execShell(clientIdx);
         }
         else {
-            // save pid to the list
-            clients[clientIdx].pid = clientpid;
+            // parent. save pid to the list
+            clients[clientIdx].pid = clientPid;
+        }
+    }
+}
+
+/**
+ * Accept incoming connections
+ */
+void acceptClientErr(int listenErrFd) {
+    struct sockaddr_in caddr;
+    unsigned int clen = sizeof(caddr);
+    int clientErrFd;
+    memset(&caddr, 0, sizeof(caddr));
+    clientErrFd = accept(listenErrFd, (struct sockaddr *) &caddr, &clen);
+    if (clientErrFd > 0) {
+        LogI(DAEMON, "New connection for stderr %d", clientErrFd);
+        for (int i = 0; i < MAX_CLIENT; i++) {
+            if (clientErrFds[i] == 0) {
+                clientErrFds[i] = clientErrFd;
+                return;
+            }
         }
     }
 }
@@ -237,30 +276,19 @@ void acceptClient(int sockfd) {
 /**
  * Wait and serve all clients
  */
-void serveClients(int sockfd, int errSockfd) {
-    fd_set readset;
-
+void serveClients(int listenFd, int listenErrFd) {
+    fd_set readSet;
     struct timeval timeout = {10, 0};
-
     memset(&timeout, 0, sizeof(timeout));
-
-    // register signal handler to process child exits
-    struct sigaction act = {};
-    memset(&act, 0, sizeof(act));
-    act.sa_sigaction = handleSignals;
-    act.sa_flags = SA_SIGINFO | SA_RESTART;
-    sigaction(SIGCHLD, &act, nullptr);
-    LogV(DAEMON, "Registered signal handler.");
-
-    // wait for max 10s for incoming su command
-    LogI(DAEMON, "Accepting clients on sock %d", sockfd);
+    registerSignalHandler();
+    LogI(DAEMON, "Accepting clients on sock %d and sockErr", listenFd, listenErrFd);
 
     while (true) {
-        int maxfd = addDaemonFdsToReadset(sockfd, &readset);
+        int maxfd = addDaemonFdsToReadset(listenFd, &readSet);
 
-        // pool and wait for 10s max
+        // pool and wait
         timeout.tv_sec = 10;
-        int selectVal = select(maxfd + 1, &readset, nullptr, nullptr, &timeout);
+        int selectVal = select(maxfd + 1, &readSet, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
             if (errno != EINTR) {
                 perror("select");
@@ -276,11 +304,15 @@ void serveClients(int sockfd, int errSockfd) {
         }
         else if (selectVal > 0) {
             // is that an incoming connection from the listening socket?
-            if (FD_ISSET(sockfd, &readset)) {
-                acceptClient(sockfd);
+            if (FD_ISSET(listenFd, &readSet)) {
+                acceptClient(listenFd);
+            }
+            // is that an incoming connection from the listening socket for stderr?
+            if (FD_ISSET(listenErrFd, &readSet)) {
+                acceptClientErr(listenErrFd);
             }
             // is that data from children or clients?
-            daemonForward(&readset);
+            daemonForward(&readSet);
         }
         disconnectDeadClients();
     }
@@ -292,8 +324,9 @@ void serveClients(int sockfd, int errSockfd) {
 void goDaemonMode() {
     LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
     LogI(DAEMON, "Operating in daemon mode.");
-    int sockfd = initListeningSocket(TINYSU_PORT);
+    int listenFd = initListeningSocket(TINYSU_PORT);
+    int listenErrFd = initListeningSocket(TINYSU_PORT_ERR);
     memset(clients, 0, sizeof(clients));
-    memset(errSockfds, 0, sizeof(errSockfds));
-    serveClients(sockfd, 0);
+    memset(clientErrFds, 0, sizeof(clientErrFds));
+    serveClients(listenFd, listenErrFd);
 }
