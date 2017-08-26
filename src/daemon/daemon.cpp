@@ -278,7 +278,7 @@ void acceptClientErr(int listenErrFd) {
 
         for (int i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].fd == clientId) {
-                LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
+                // LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
                 clients[i].errFd = clientErrFd;
                 return;
             }
@@ -301,7 +301,7 @@ void serveClients(int listenFd, int listenErrFd) {
         int maxfd = addDaemonFdsToReadset(&readSet);
 
         // pool and wait
-        timeout.tv_sec = 10;
+        timeout.tv_sec = 3600;
         int selectVal = select(maxfd + 1, &readSet, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
             if (errno != EINTR) {
@@ -314,7 +314,7 @@ void serveClients(int listenFd, int listenErrFd) {
             }
         }
         else if (selectVal == 0) {
-            LogI(DAEMON, "Nothing for daemon select()");
+            // LogI(DAEMON, "Nothing for daemon select()");
         }
         else if (selectVal > 0) {
             // is that an incoming connection from the listening socket?

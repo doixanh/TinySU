@@ -89,7 +89,7 @@ void sendCommand(int daemonFd, char *cmd) {
     memset(&timeout, 0, sizeof(timeout));
 
     if (cmd != nullptr) {
-        LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
+        // LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
         strcat(cmd, "\nexit\n");
         write(daemonFd, cmd, strlen(cmd));
     }
@@ -108,7 +108,7 @@ void sendCommand(int daemonFd, char *cmd) {
         int maxFd = daemonFd > daemonErrFd ? daemonFd : daemonErrFd;
 
         // pool and wait
-        timeout.tv_sec = 5;
+        timeout.tv_sec = 3600;
         int selectVal = select(maxFd + 1, &readSet, nullptr, nullptr, &timeout);
         if (selectVal < 0) {
             // error
@@ -139,7 +139,7 @@ void sendCommand(int daemonFd, char *cmd) {
             }
         }
         else if (selectVal == 0) {
-            LogI(CLIENT, "Nothing is ready for select()");
+            // LogI(CLIENT, "Nothing is ready for select()");
         }
     }
     fflush(stdout);

@@ -92,7 +92,7 @@ template <typename F> void proxy(int from, int to, F onerror) {
         }
 
         getActorNameByFd(from, actorName, log);
-        LogI(log, "%s says %s", actorName, s);
+        // LogI(log, "%s says %s", actorName, s);
 
         write(to, s, (size_t) numRead);
         firstLoop = false;
