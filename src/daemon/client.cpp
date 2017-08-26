@@ -129,6 +129,14 @@ void sendCommand(int daemonFd, char *cmd) {
                     connected = false;
                 });
             }
+            // is that an incoming connection from the connected stderr socket?
+            if (FD_ISSET(daemonErrFd, &readSet)) {
+                // forward to stderr
+                proxy(daemonErrFd, STDERR_FILENO, [&connected](int from) {
+                    LogI(CLIENT, "Daemon has just disconnected us :(");
+                    connected = false;
+                });
+            }
         }
         else if (selectVal == 0) {
             LogI(CLIENT, "Nothing is ready for select()");
