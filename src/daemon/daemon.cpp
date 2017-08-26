@@ -186,22 +186,22 @@ void execShell(int clientIdx) {
 /**
  * Forward data between children and clients
  */
-void daemonForward(fd_set *readset) {
+void forwardData(fd_set *readSet) {
     for (int i = 0; i < MAX_CLIENT; i++) {
         // is that data from a child stdout? forward to the client stdout
-        if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], readset)) {
+        if (clients[i].fd > 0 && FD_ISSET(clients[i].out[0], readSet)) {
             // forward to the client
             proxy(clients[i].out[0], clients[i].fd, nothing);
         }
 
         // is that data from a child stderr? forward to the client stderr
-        if (clients[i].fd > 0 && FD_ISSET(clients[i].err[0], readset)) {
+        if (clients[i].fd > 0 && FD_ISSET(clients[i].err[0], readSet)) {
             // forward to the client
-            proxy(clients[i].err[0], clients[i].fd, nothing);
+            proxy(clients[i].err[0], clients[i].errFd, nothing);
         }
 
         // is that data from a previously-connect client?
-        if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, readset)) {
+        if (clients[i].fd > 0 && FD_ISSET(clients[i].fd, readSet)) {
             // forward to the corresponding child's stdin
             proxy(clients[i].fd, clients[i].in[1], [](int from) {
                 // some error. remove it from the "active" fd array
@@ -273,8 +273,7 @@ void acceptClientErr(int listenErrFd) {
 
         // wait for id from client
         memset(s, 0, sizeof(s));
-        ssize_t numRead = read(clientErrFd, s, sizeof(s));
-        LogV(DAEMON, "Received len=%d, client id %s", numRead, s);
+        read(clientErrFd, s, sizeof(s));
         clientId = atoi(s);
 
         for (int i = 0; i < MAX_CLIENT; i++) {
@@ -327,7 +326,7 @@ void serveClients(int listenFd, int listenErrFd) {
                 acceptClientErr(listenErrFd);
             }
             // is that data from children or clients?
-            daemonForward(&readSet);
+            forwardData(&readSet);
         }
         disconnectDeadClients();
     }
