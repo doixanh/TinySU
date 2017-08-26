@@ -93,7 +93,8 @@ void disconnectDeadClients() {
             close(clients[i].err[0]);
             close(clients[i].err[1]);
             close(clients[i].fd);
-            LogI(DAEMON, " - Closing following fds: %d %d %d %d %d %d %d", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd);
+            close(clients[i].errFd);
+            LogI(DAEMON, " - Closing following fds: in [%d %d] out [%d %d] err [%d %d] sock [%d %d]", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd, clients[i].errFd);
             clients[i].died = 0;
             clients[i].pid = 0;
             clients[i].fd = 0;
@@ -272,7 +273,7 @@ void acceptClientErr(int listenErrFd) {
 
         // wait for id from client
         memset(s, 0, sizeof(s));
-        int numRead = read(clientErrFd, s, strlen(s));
+        ssize_t numRead = read(clientErrFd, s, sizeof(s));
         LogV(DAEMON, "Received len=%d, client id %s", numRead, s);
         clientId = atoi(s);
 
