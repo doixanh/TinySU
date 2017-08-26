@@ -5,7 +5,6 @@
 
 #include <errno.h>
 #ifdef ARM
-#include <selinux/selinux.h>
 #include <android/log.h>
 #endif
 

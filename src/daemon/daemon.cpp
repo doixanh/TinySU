@@ -173,9 +173,6 @@ void execShell(int clientIdx) {
     setenv("SHELL", DEFAULT_SHELL, 1);
     setenv("USER", "root", 1);
     setenv("LOGNAME", "root", 1);
-#ifdef ARM
-    setexeccon("u:r:su:s0");
-#endif
     execvp(argv[0], argv);
 
     // if code goes here, meaning we have problems with execvp
