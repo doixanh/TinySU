@@ -35,18 +35,17 @@ void connectToDaemon() {
 
     // connect to server
     if (connect(daemonFd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
-        LogE(CLIENT, "Cannot connect to daemon");
-        perror("connect");
+        LogE(CLIENT, "Cannot connect to daemon at %s. Error %s", TINYSU_SOCKET_PATH, strerror(errno));
         doClose(daemonFd);
         exit(1);
     }
-    LogV(CLIENT, "daemonFd=%d", daemonFd);
+    // LogV(CLIENT, "daemonFd=%d", daemonFd);
 
     // wait for our id
     memset(s, 0, sizeof(s));
     read(daemonFd, s, sizeof(s));
     clientId = atoi(s);
-    LogI(CLIENT, "Our id is %d", clientId);
+    // LogI(CLIENT, "Our id is %d", clientId);
 
     // create the stderr socket
     if ((daemonErrFd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
@@ -61,7 +60,8 @@ void connectToDaemon() {
 
     // connect to server on stderr socket
     if (connect(daemonErrFd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
-        LogE(CLIENT, "Cannot connect to daemon");
+        LogE(CLIENT, "Cannot connect to daemon err at %s. Error %s", TINYSU_SOCKET_ERR_PATH, strerror(errno));
+        perror("connect");
         doClose(daemonErrFd);
         exit(1);
     }
@@ -120,7 +120,7 @@ void sendCommand(int daemonFd, char *cmd) {
             if (FD_ISSET(daemonFd, &readSet)) {
                 // forward to stdout
                 proxy(daemonFd, STDOUT_FILENO, [&connected](int from) {
-                    LogI(CLIENT, "Daemon has just disconnected us :(");
+                    // LogI(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
                 });
             }
@@ -128,7 +128,7 @@ void sendCommand(int daemonFd, char *cmd) {
             if (FD_ISSET(daemonErrFd, &readSet)) {
                 // forward to stderr
                 proxy(daemonErrFd, STDERR_FILENO, [&connected](int from) {
-                    LogI(CLIENT, "Daemon has just disconnected us :(");
+                    // LogI(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
                 });
             }

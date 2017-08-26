@@ -12,8 +12,8 @@
 #define TINYSU_VER_STR "0.2"
 
 #ifdef ARM
-#define TINYSU_SOCKET_PATH (char*) "/data/tinysu"
-#define TINYSU_SOCKET_ERR_PATH (char*) "/data/tinysu.err"
+#define TINYSU_SOCKET_PATH (char*) "/su/tinysu"
+#define TINYSU_SOCKET_ERR_PATH (char*) "/su/tinysu.err"
 #else
 #define TINYSU_SOCKET_PATH (char*) "/tmp/tinysu"
 #define TINYSU_SOCKET_ERR_PATH (char*) "/tmp/tinysu.err"

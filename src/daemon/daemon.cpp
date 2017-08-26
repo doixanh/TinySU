@@ -11,6 +11,7 @@
 #include <netinet/ip.h>
 #include <errno.h>
 #include <sys/un.h>
+#include <sys/stat.h>
 
 #include "tinysu.h"
 
@@ -50,6 +51,7 @@ void registerSignalHandler() {
 int initListeningSocket(char *path) {
     int sockfd;
     struct sockaddr_un saddr;
+    umask(0);
     if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         LogE(DAEMON, "Error creating socket");
         exit(1);
@@ -66,6 +68,7 @@ int initListeningSocket(char *path) {
     saddr.sun_family = AF_UNIX;
     strcpy(saddr.sun_path, path);
     unlink(path);
+
     if (bind(sockfd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) {
         LogE(DAEMON, "Error binding socket %s", path);
         perror("bind");
@@ -86,7 +89,7 @@ int initListeningSocket(char *path) {
 void disconnectDeadClients() {
     for (int i = 0; i < MAX_CLIENT; i++) {
         if (clients[i].died) {
-            LogI(DAEMON, " - Child %d died, disconnecting client %d", clients[i].pid, clients[i].fd);
+            // LogI(DAEMON, " - Child %d died, disconnecting client %d", clients[i].pid, clients[i].fd);
             close(clients[i].in[0]);
             close(clients[i].in[1]);
             close(clients[i].out[0]);
@@ -95,7 +98,7 @@ void disconnectDeadClients() {
             close(clients[i].err[1]);
             close(clients[i].fd);
             close(clients[i].errFd);
-            LogI(DAEMON, " - Closing following fds: in [%d %d] out [%d %d] err [%d %d] sock [%d %d]", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd, clients[i].errFd);
+            // LogI(DAEMON, " - Closing following fds: in [%d %d] out [%d %d] err [%d %d] sock [%d %d]", clients[i].in[0], clients[i].in[1], clients[i].out[0], clients[i].out[1], clients[i].err[0], clients[i].err[1], clients[i].fd, clients[i].errFd);
             clients[i].died = 0;
             clients[i].pid = 0;
             clients[i].fd = 0;
@@ -203,7 +206,7 @@ void forwardData(fd_set *readSet) {
             // forward to the corresponding child's stdin
             proxy(clients[i].fd, clients[i].in[1], [](int from) {
                 // some error. remove it from the "active" fd array
-                LogI(DAEMON, " - Client %d has disconnected.", from);
+                // LogI(DAEMON, " - Client %d has disconnected.", from);
                 shutdown(from, SHUT_RDWR);
                 // we dont close from here, we will do it in disconnectDeadClients();
 
@@ -267,7 +270,7 @@ void acceptClientErr(int listenErrFd) {
     memset(&caddr, 0, sizeof(caddr));
     clientErrFd = accept(listenErrFd, (struct sockaddr *) &caddr, &clen);
     if (clientErrFd > 0) {
-        LogI(DAEMON, "New connection for stderr %d", clientErrFd);
+        // LogI(DAEMON, "New connection for stderr %d", clientErrFd);
 
         // wait for id from client
         memset(s, 0, sizeof(s));
@@ -276,7 +279,7 @@ void acceptClientErr(int listenErrFd) {
 
         for (int i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].fd == clientId) {
-                LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
+                // LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
                 clients[i].errFd = clientErrFd;
                 return;
             }
@@ -293,7 +296,7 @@ void serveClients(int listenFd, int listenErrFd) {
     struct timeval timeout = {10, 0};
     memset(&timeout, 0, sizeof(timeout));
     registerSignalHandler();
-    LogI(DAEMON, "Serving clients on sock %d and sockErr %d", listenFd, listenErrFd);
+    // LogI(DAEMON, "Serving clients on sock %d and sockErr %d", listenFd, listenErrFd);
 
     while (true) {
         int maxfd = addDaemonFdsToReadset(&readSet);
