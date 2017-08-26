@@ -6,6 +6,6 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 set(SOURCE_FILES
         tinysu.cpp
-        tinysu.h)
+        tinysu.h daemon.cpp daemon.h client.cpp client.h)
 
 add_executable(daemon ${SOURCE_FILES})

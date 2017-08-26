@@ -3,6 +3,12 @@
  * Licensed with GPLv3.
  */
 
+#include <errno.h>
+#ifdef ARM
+#include <selinux/selinux.h>
+#include <android/log.h>
+#endif
+
 #define TINYSU_VER 1
 #define TINYSU_VER_STR "0.1"
 
@@ -39,6 +45,7 @@
     #define LogE(x, y, args...) ERROR(printf("E/[%10s] " y "\n", x, ## args))
 #endif
 
+// struct definitions
 typedef struct client {
     int fd;
     int errSockfd;
@@ -49,3 +56,46 @@ typedef struct client {
     int pendingData;
     int died;
 } client_t;
+
+// shared variables
+extern client_t clients[MAX_CLIENT];
+extern int errSockfds[MAX_CLIENT];
+auto nothing = [](int from){};
+
+// utility functions
+void doClose(int fd);
+void markNonblock(int fd);
+void getActorNameByFd(int fd, char *actorName, char *logPrefix);
+
+// function definitions
+/**
+ * Read all possible data from one file descriptor and write to the other
+ */
+template <typename F> void proxy(int from, int to, F onerror) {
+    char s[1024];
+    char actorName[32];
+    char log[16];
+    bool firstLoop = true;
+    while (true) {
+        memset(s, 0, sizeof(s));
+        ssize_t numRead = read(from, s, sizeof(s) - 1);
+        if (numRead < 0) {
+            if (errno != EAGAIN) {
+                onerror(from);
+            }
+            break;
+        }
+        else if (numRead == 0) {
+            if (firstLoop) {
+                onerror(from);
+            }
+            break;
+        }
+
+        getActorNameByFd(from, actorName, log);
+        LogI(log, "%s says %s", actorName, s);
+
+        write(to, s, (size_t) numRead);
+        firstLoop = false;
+    }
+}

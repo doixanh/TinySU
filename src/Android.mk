@@ -3,7 +3,7 @@ LOCAL_PATH := $(call my-dir)
 # binary
 include $(CLEAR_VARS)
 LOCAL_MODULE := tinysu
-LOCAL_SRC_FILES := daemon/tinysu.cpp
+LOCAL_SRC_FILES := daemon/tinysu.cpp daemon/daemon.cpp daemon/client.cpp
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/daemon \
 	$(LOCAL_PATH)/external
