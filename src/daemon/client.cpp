@@ -11,11 +11,13 @@
 #include "tinysu.h"
 #include "client.h"
 
+int clientId;
 /**
  * Connect to the daemon
  * @return sockfd
  */
 int connectToDaemon() {
+    char s[16];
     struct sockaddr_in saddr = {};
     int daemonFd;
 
@@ -37,6 +39,12 @@ int connectToDaemon() {
         doClose(daemonFd);
         exit(1);
     }
+
+    // wait for our id
+    memset(s, 0, sizeof(s));
+    read(daemonFd, s, sizeof(s));
+    clientId = atoi(s);
+    LogI(CLIENT, "Our id is %d", clientId);
 
     // make it nonblocking
     markNonblock(daemonFd);

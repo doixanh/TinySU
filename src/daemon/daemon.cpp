@@ -281,7 +281,7 @@ void serveClients(int listenFd, int listenErrFd) {
     struct timeval timeout = {10, 0};
     memset(&timeout, 0, sizeof(timeout));
     registerSignalHandler();
-    LogI(DAEMON, "Accepting clients on sock %d and sockErr", listenFd, listenErrFd);
+    LogI(DAEMON, "Accepting clients on sock %d and sockErr %d", listenFd, listenErrFd);
 
     while (true) {
         int maxfd = addDaemonFdsToReadset(listenFd, &readSet);
