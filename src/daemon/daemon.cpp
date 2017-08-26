@@ -10,9 +10,9 @@
 #include <string.h>
 #include <netinet/ip.h>
 #include <errno.h>
+#include <sys/un.h>
 
 #include "tinysu.h"
-#include "daemon.h"
 
 int listenFd;
 int listenErrFd;
@@ -47,10 +47,10 @@ void registerSignalHandler() {
 /**
  * Init a listening TCP socket
  */
-int initListeningSocket(int port) {
+int initListeningSocket(char *path) {
     int sockfd;
-    struct sockaddr_in saddr = {};
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    struct sockaddr_un saddr;
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         LogE(DAEMON, "Error creating socket");
         exit(1);
     }
@@ -63,11 +63,12 @@ int initListeningSocket(int port) {
     markNonblock(sockfd);
 
     memset(&saddr, 0, sizeof(saddr));
-    saddr.sin_family = AF_INET;
-    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    saddr.sin_port = htons(port);
+    saddr.sun_family = AF_UNIX;
+    strcpy(saddr.sun_path, path);
+    unlink(path);
     if (bind(sockfd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) {
-        LogE(DAEMON, "Error binding socket");
+        LogE(DAEMON, "Error binding socket %s", path);
+        perror("bind");
         exit(1);
     }
 
@@ -275,7 +276,7 @@ void acceptClientErr(int listenErrFd) {
 
         for (int i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].fd == clientId) {
-                // LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
+                LogV(DAEMON, "Matching clientErrFd %d with clientFd %d", clientErrFd, clientId);
                 clients[i].errFd = clientErrFd;
                 return;
             }
@@ -292,7 +293,7 @@ void serveClients(int listenFd, int listenErrFd) {
     struct timeval timeout = {10, 0};
     memset(&timeout, 0, sizeof(timeout));
     registerSignalHandler();
-    LogI(DAEMON, "Accepting clients on sock %d and sockErr %d", listenFd, listenErrFd);
+    LogI(DAEMON, "Serving clients on sock %d and sockErr %d", listenFd, listenErrFd);
 
     while (true) {
         int maxfd = addDaemonFdsToReadset(&readSet);
@@ -336,7 +337,7 @@ void goDaemonMode() {
     LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
     LogI(DAEMON, "Operating in daemon mode.");
     memset(clients, 0, sizeof(clients));
-    listenFd = initListeningSocket(TINYSU_PORT);
-    listenErrFd = initListeningSocket(TINYSU_PORT_ERR);
+    listenFd = initListeningSocket(TINYSU_SOCKET_PATH);
+    listenErrFd = initListeningSocket(TINYSU_SOCKET_ERR_PATH);
     serveClients(listenFd, listenErrFd);
 }

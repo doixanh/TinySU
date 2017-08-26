@@ -7,9 +7,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <netinet/ip.h>
+#include <sys/un.h>
 
 #include "tinysu.h"
-#include "client.h"
 
 int clientId;
 int daemonFd;
@@ -20,23 +20,23 @@ int daemonErrFd;
  */
 void connectToDaemon() {
     char s[16];
-    struct sockaddr_in saddr = {};
+    struct sockaddr_un saddr;
 
     // create the socket
-    if ((daemonFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((daemonFd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         LogE(CLIENT, "Error creating socket");
         exit(1);
     }
 
     // init sockaddr
     memset(&saddr, 0, sizeof(saddr));
-    saddr.sin_family = AF_INET;
-    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    saddr.sin_port = htons(TINYSU_PORT);
+    saddr.sun_family = AF_UNIX;
+    strcpy(saddr.sun_path, TINYSU_SOCKET_PATH);
 
     // connect to server
     if (connect(daemonFd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
         LogE(CLIENT, "Cannot connect to daemon");
+        perror("connect");
         doClose(daemonFd);
         exit(1);
     }
@@ -48,19 +48,16 @@ void connectToDaemon() {
     clientId = atoi(s);
     LogI(CLIENT, "Our id is %d", clientId);
 
-
-
     // create the stderr socket
-    if ((daemonErrFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((daemonErrFd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         LogE(CLIENT, "Error creating err socket");
         exit(1);
     }
 
     // init sockaddr
     memset(&saddr, 0, sizeof(saddr));
-    saddr.sin_family = AF_INET;
-    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    saddr.sin_port = htons(TINYSU_PORT_ERR);
+    saddr.sun_family = AF_UNIX;
+    strcpy(saddr.sun_path, TINYSU_SOCKET_ERR_PATH);
 
     // connect to server on stderr socket
     if (connect(daemonErrFd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
@@ -68,9 +65,7 @@ void connectToDaemon() {
         doClose(daemonErrFd);
         exit(1);
     }
-    LogV(CLIENT, "daemonErrFd=%d", daemonErrFd);
-    int numWrite = write(daemonErrFd, s, strlen(s));
-    LogV(CLIENT, "Sent our id to stderr socket as %s, len=%d", s, numWrite);
+    write(daemonErrFd, s, strlen(s));
 
     // make them nonblocking
     markNonblock(daemonFd);

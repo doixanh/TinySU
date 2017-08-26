@@ -8,8 +8,16 @@
 #include <android/log.h>
 #endif
 
-#define TINYSU_VER 1
-#define TINYSU_VER_STR "0.1"
+#define TINYSU_VER 2
+#define TINYSU_VER_STR "0.2"
+
+#ifdef ARM
+#define TINYSU_SOCKET_PATH (char*) "/data/tinysu"
+#define TINYSU_SOCKET_ERR_PATH (char*) "/data/tinysu.err"
+#else
+#define TINYSU_SOCKET_PATH (char*) "/tmp/tinysu"
+#define TINYSU_SOCKET_ERR_PATH (char*) "/tmp/tinysu.err"
+#endif
 
 #define TINYSU_PORT 12385
 #define TINYSU_PORT_ERR 12386
