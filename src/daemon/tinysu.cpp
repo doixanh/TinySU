@@ -23,7 +23,7 @@ client_t clients[MAX_CLIENT];
 char *shell = nullptr;
 
 void doClose(int fd) {
-    LogV(DAEMON, "Closing fd %d", fd);
+    // LogV(DAEMON, "Closing fd %d", fd);
     close(fd);
 }
 /**
@@ -90,10 +90,10 @@ void printUsage(char *self) {
 int main(int argc, char **argv) {
     setbuf(stdout, nullptr);
     int opt = 0;
-    LogV(CLIENT, "Running su parameters:");
+    /*LogV(CLIENT, "Running su parameters:");
     for (int i = 0; i < argc; i++) {
         LogV(CLIENT, "- %s", argv[i]);
-    }
+    }*/
     while ((opt = getopt(argc, argv, "hdvVc:s:")) != -1) {
         switch (opt) {
             case 'h':

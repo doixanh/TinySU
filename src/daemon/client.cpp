@@ -71,7 +71,7 @@ void connectToDaemon() {
     markNonblock(daemonFd);
     markNonblock(daemonErrFd);
 
-    LogV(CLIENT, "Connected successfully!");
+    // LogV(CLIENT, "Connected successfully!");
 }
 
 /**

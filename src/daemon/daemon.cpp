@@ -25,7 +25,7 @@ void handleSignals(int signum, siginfo_t *info, void *ptr)  {
     if (signum == SIGCHLD) {
         for (int i = 0; i < MAX_CLIENT; i++) {
             if (clients[i].pid == info->si_pid) {
-                LogI(DAEMON, " - Child %d is killed. ", clients[i].pid);
+                // LogI(DAEMON, " - Child %d is killed. ", clients[i].pid);
                 clients[i].died = 1;
                 break;
             }
@@ -42,7 +42,7 @@ void registerSignalHandler() {
     act.sa_sigaction = handleSignals;
     act.sa_flags = SA_SIGINFO | SA_RESTART;
     sigaction(SIGCHLD, &act, nullptr);
-    LogV(DAEMON, "Registered signal handler.");
+    // LogV(DAEMON, "Registered signal handler.");
 }
 
 /**
@@ -236,7 +236,7 @@ void acceptClient(int listenFd) {
     memset(&caddr, 0, sizeof(caddr));
     clientFd = accept(listenFd, (struct sockaddr *) &caddr, &clen);
     if (clientFd > 0) {
-        LogI(DAEMON, "New client %d", clientFd);
+        // LogI(DAEMON, "New client %d", clientFd);
 
         // welcome with its id
         memset(s, 0, sizeof(s));
