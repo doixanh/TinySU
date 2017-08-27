@@ -6,13 +6,16 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
 #include <netinet/ip.h>
 #include <errno.h>
 #include <sys/un.h>
 #include <sys/stat.h>
-#include <sys/ucred.h>
+#if defined(SO_PEERCRED)
+//#include <sys/ucred.h>
+#endif
 
 #include "tinysu.h"
 
@@ -229,11 +232,45 @@ void forwardData(fd_set *readSet) {
  * Check whether or not we accept su requests from this client
  */
 bool authClient(int clientFd) {
+    char uids[8];
+#if defined(SO_PEERCRED)
+    struct ucred cred;
+    socklen_t credLen = sizeof(cred);
+    memset(&cred, 0, credLen);
+    getsockopt(clientFd, SOL_SOCKET, SO_PEERCRED, &cred, &credLen);
+    sprintf(uids, "%d", cred.uid);
+#else
     uid_t uid;
     gid_t gid;
     getpeereid(clientFd, &uid, &gid);
+    sprintf(uids, "%d", uid);
     LogI(DAEMON, "Client uid is %d, gid is %d", uid, gid);
-    return false;
+#endif
+
+    // start our request activity using am (taken from /system/bin/am)
+    char *argv[] = {
+            (char *) "/system/bin/app_process",
+            (char *) "/system/bin",
+            (char *) "com.android.commands.am.Am",
+            (char *) "start",
+            (char *) "-W",
+            (char *) "--ei", (char *) "uid", uids,
+            (char *) "com.doixanh.tinysu/.RequestActivity",
+            NULL
+    };
+
+    int clientPid = fork();
+    if (clientPid != 0) {
+        // child, do exec
+        setenv("CLASSPATH", "/system/framework/am.jar", 1);
+        execvp(argv[0], argv);
+    }
+    else {
+        // parent. wait for pid.
+        waitpid(clientPid, NULL, 0);
+    }
+
+    return true;
 }
 
 /**
