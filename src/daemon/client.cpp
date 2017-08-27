@@ -43,7 +43,13 @@ void connectToDaemon() {
 
     // wait for our id
     memset(s, 0, sizeof(s));
-    read(daemonFd, s, sizeof(s));
+    ssize_t numRead = read(daemonFd, s, sizeof(s));
+    if (numRead <= 0) {
+        // we are not authenticated.
+        LogE(DAEMON, "Not authenticated.");
+        close(daemonFd);
+        exit(1);
+    }
     clientId = atoi(s);
     // LogI(CLIENT, "Our id is %d", clientId);
 

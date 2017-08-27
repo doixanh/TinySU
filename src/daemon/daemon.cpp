@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <sys/un.h>
 #include <sys/stat.h>
+#include <sys/ucred.h>
 
 #include "tinysu.h"
 
@@ -225,6 +226,17 @@ void forwardData(fd_set *readSet) {
 }
 
 /**
+ * Check whether or not we accept su requests from this client
+ */
+bool authClient(int clientFd) {
+    uid_t uid;
+    gid_t gid;
+    getpeereid(clientFd, &uid, &gid);
+    LogI(DAEMON, "Client uid is %d, gid is %d", uid, gid);
+    return false;
+}
+
+/**
  * Accept incoming connections
  */
 void acceptClient(int listenFd) {
@@ -236,7 +248,13 @@ void acceptClient(int listenFd) {
     memset(&caddr, 0, sizeof(caddr));
     clientFd = accept(listenFd, (struct sockaddr *) &caddr, &clen);
     if (clientFd > 0) {
-        // LogI(DAEMON, "New client %d", clientFd);
+        LogI(DAEMON, "New client %d", clientFd);
+
+        if (!authClient(clientFd)) {
+            LogE(DAEMON, "Unauthorized access for client %d", clientFd);
+            close(clientFd);
+            return;
+        }
 
         // welcome with its id
         memset(s, 0, sizeof(s));
