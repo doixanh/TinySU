@@ -6,6 +6,12 @@
     android:minHeight="100dip"
     android:orientation="vertical">
 
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:layout_marginTop="@dimen/marginHalf"
+        android:background="@color/primary_dark" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -13,12 +19,37 @@
         android:text="@string/request"
         android:textAppearance="@android:style/TextAppearance.Material.Small" />
 
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:textAppearance="@android:style/TextAppearance.Material.Medium" />
+
+        <ImageView
+            android:id="@+id/logo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="@dimen/marginHalf"
+            android:layout_toLeftOf="@id/name" />
+    </RelativeLayout>
+
     <TextView
-        android:id="@+id/uid"
-        android:gravity="center"
+        android:id="@+id/packages"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAppearance="@android:style/TextAppearance.Material.Medium" />
+        android:layout_marginTop="@dimen/marginHalf"
+        android:gravity="center"
+        android:textAppearance="@android:style/TextAppearance.Material.Small" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:background="@color/primary_dark" />
 
     <LinearLayout
         style="?android:attr/buttonBarStyle"
@@ -33,6 +64,11 @@
             android:layout_weight="1"
             android:text="@string/no"
             android:textColor="@color/primary_text" />
+
+        <View
+            android:layout_width="1px"
+            android:layout_height="@dimen/button"
+            android:background="@color/primary_dark" />
 
         <Button
             style="?android:attr/buttonBarButtonStyle"

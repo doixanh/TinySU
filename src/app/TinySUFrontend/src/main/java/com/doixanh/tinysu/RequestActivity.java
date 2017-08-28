@@ -3,7 +3,9 @@ package com.doixanh.tinysu;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.doixanh.tinysu.R;
@@ -19,19 +21,23 @@ public class RequestActivity extends Activity {
         int uid = intent.getIntExtra("uid", 0);
         String names[] = getPackageManager().getPackagesForUid(uid);
 
-        String all = "";
+
         PackageManager packageManager= getApplicationContext().getPackageManager();
         try {
             String appName = (String) packageManager.getApplicationLabel(packageManager.getApplicationInfo(names[0], PackageManager.GET_META_DATA));
-            all += appName + "\n\n";
+            TextView tv = findViewById(R.id.name);
+            tv.setText(appName);
+
+            Drawable logo = getPackageManager().getApplicationIcon(names[0]);
+            ((ImageView)findViewById(R.id.logo)).setImageDrawable(logo);
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
         }
 
+        String all = "";
         for (String name: names) {
             all += name + "\n";
         }
-        TextView tv = (TextView) findViewById(R.id.uid);
-        tv.setText(all);
+        ((TextView) findViewById(R.id.packages)).setText(all);
     }
 }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="margin">16dip</dimen>
+    <dimen name="marginHalf">8dip</dimen>
     <dimen name="button">48dip</dimen>
 </resources>
