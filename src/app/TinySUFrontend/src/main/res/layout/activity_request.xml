@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="1px"
         android:layout_marginTop="@dimen/marginHalf"
-        android:background="@color/primary_dark" />
+        android:background="@color/divider" />
 
     <TextView
         android:layout_width="match_parent"
@@ -32,8 +32,8 @@
 
         <ImageView
             android:id="@+id/logo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="@dimen/button"
+            android:layout_height="@dimen/button"
             android:layout_marginRight="@dimen/marginHalf"
             android:layout_toLeftOf="@id/name" />
     </RelativeLayout>
@@ -49,7 +49,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1px"
-        android:background="@color/primary_dark" />
+        android:background="@color/divider" />
 
     <LinearLayout
         style="?android:attr/buttonBarStyle"
@@ -63,12 +63,13 @@
             android:layout_height="@dimen/button"
             android:layout_weight="1"
             android:text="@string/no"
-            android:textColor="@color/primary_text" />
+            android:textAllCaps="true"
+            android:textAppearance="@android:style/TextAppearance.Material.Small" />
 
         <View
             android:layout_width="1px"
             android:layout_height="@dimen/button"
-            android:background="@color/primary_dark" />
+            android:background="@color/divider" />
 
         <Button
             style="?android:attr/buttonBarButtonStyle"
@@ -76,6 +77,8 @@
             android:layout_height="@dimen/button"
             android:layout_weight="1"
             android:text="@string/yes"
-            android:textColor="@color/primary" />
+            android:textAllCaps="true"
+            android:textColor="@color/accent"
+            android:textAppearance="@android:style/TextAppearance.Material.Small" />
     </LinearLayout>
 </LinearLayout>

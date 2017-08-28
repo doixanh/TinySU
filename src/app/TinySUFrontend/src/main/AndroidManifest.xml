@@ -19,7 +19,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".RequestActivity"
-            android:theme="@android:style/Theme.Material.Light.Dialog"/>
+            android:theme="@android:style/Theme.Material.Dialog"/>
     </application>
 
 </manifest>
