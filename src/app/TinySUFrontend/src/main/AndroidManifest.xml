@@ -18,8 +18,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".RequestActivity" />
-        <activity android:name=".RequestPopupActivity"></activity>
+        <activity android:name=".RequestActivity"
+            android:theme="@android:style/Theme.Material.Light.Dialog"/>
     </application>
 
 </manifest>
