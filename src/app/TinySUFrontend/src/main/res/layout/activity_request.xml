@@ -58,6 +58,7 @@
         android:orientation="horizontal">
 
         <Button
+            android:id="@+id/no"
             style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dip"
             android:layout_height="@dimen/button"
@@ -69,16 +70,18 @@
         <View
             android:layout_width="1px"
             android:layout_height="@dimen/button"
+            android:layout_marginTop="1px"
             android:background="@color/divider" />
 
         <Button
+            android:id="@+id/yes"
             style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dip"
             android:layout_height="@dimen/button"
             android:layout_weight="1"
             android:text="@string/yes"
             android:textAllCaps="true"
-            android:textColor="@color/accent"
-            android:textAppearance="@android:style/TextAppearance.Material.Small" />
+            android:textAppearance="@android:style/TextAppearance.Material.Small"
+            android:textColor="@color/accent" />
     </LinearLayout>
 </LinearLayout>
