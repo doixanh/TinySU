@@ -34,6 +34,9 @@
 #define ACTOR_DAEMON (char*) "Daemon"
 #define ACTOR_CHILD (char*) "Child"
 
+#define AUTH_TIMEOUT 15
+#define AUTH_OK (char*) "YaY!"
+
 #ifdef ARM
     #define DEFAULT_SHELL (char*) "/system/bin/sh"
 #else

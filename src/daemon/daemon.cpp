@@ -239,6 +239,7 @@ bool authClient(int clientFd) {
     memset(&cred, 0, credLen);
     getsockopt(clientFd, SOL_SOCKET, SO_PEERCRED, &cred, &credLen);
     sprintf(uids, "%d", cred.uid);
+    int uid = cred.uid;
 #else
     uid_t uid;
     gid_t gid;
@@ -246,6 +247,11 @@ bool authClient(int clientFd) {
     sprintf(uids, "%d", uid);
     LogI(DAEMON, "Client uid is %d, gid is %d", uid, gid);
 #endif
+
+    // create a new socket to wait for response from activity
+    char path[32];
+    sprintf(path, "/su/tinysu.%d.auth", uid);
+    int sockfd = initListeningSocket(path);
 
     // start our request activity using am (taken from /system/bin/am)
     char *argv[] = {
@@ -255,6 +261,7 @@ bool authClient(int clientFd) {
             (char *) "start",
             (char *) "-W",
             (char *) "--ei", (char *) "uid", uids,
+            (char *) "--es", (char *) "path", path,
             (char *) "com.doixanh.tinysu/.RequestActivity",
             NULL
     };
@@ -264,13 +271,79 @@ bool authClient(int clientFd) {
         // child, do exec
         setenv("CLASSPATH", "/system/framework/am.jar", 1);
         execvp(argv[0], argv);
-    }
-    else {
-        // parent. wait for pid.
-        waitpid(clientPid, NULL, 0);
+        return false;
     }
 
-    return true;
+    // parent. wait for response from activity
+    char response[32];
+    int responseFd = -1;
+    int maxfd;
+    fd_set readSet;
+    struct timeval timeout;
+    struct sockaddr_in caddr;
+    unsigned int clen = sizeof(caddr);
+    memset(&caddr, 0, clen);
+
+    memset(&timeout, 0, sizeof(timeout));
+    timeout.tv_sec = AUTH_TIMEOUT;
+
+    while (true) {
+        FD_ZERO(&readSet);
+        FD_SET(sockfd, &readSet);
+        maxfd = sockfd;
+        if (responseFd >= 0) {
+            FD_SET(responseFd, &readSet);
+            if (maxfd < responseFd) {
+                maxfd = responseFd;
+            }
+        }
+        int selectVal = select(maxfd + 1, &readSet, nullptr, nullptr, &timeout);
+        if (selectVal > 0) {
+            if (FD_ISSET(sockfd, &readSet)) {
+                responseFd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
+                LogI(DAEMON, "Accepted connection from Activity");
+            }
+            else if (responseFd >= 0 && FD_ISSET(responseFd, &readSet)) {
+                memset(response, 0, sizeof(response));
+                read(responseFd, response, sizeof(response));
+                LogI(DAEMON, "Retrieved response from Activity %s", response);
+                if (strcmp(response, AUTH_OK) == 0) {
+                    close(responseFd);
+                    close(sockfd);
+                    return true;
+                }
+                else {
+                    close(responseFd);
+                    close(sockfd);
+                    return false;
+                }
+            }
+            else {
+                // something abnormal here
+                close(responseFd);
+                close(sockfd);
+                return false;
+            }
+        }
+        else if (selectVal == 0) {
+            LogI(DAEMON, "Timed out.");
+            // timed out?
+            if (responseFd >= 0) {
+                close(responseFd);
+            }
+            close(sockfd);
+            return false;
+        }
+        else {
+            LogI(DAEMON, "Error.");
+            // timed out?
+            if (responseFd >= 0) {
+                close(responseFd);
+            }
+            close(sockfd);
+            return false;
+        }
+    }
 }
 
 /**
