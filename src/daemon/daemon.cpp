@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <sys/un.h>
 #include <sys/stat.h>
+
 #if defined(SO_PEERCRED)
 //#include <sys/ucred.h>
 #endif
@@ -50,7 +51,7 @@ void registerSignalHandler() {
 }
 
 /**
- * Init a listening TCP socket
+ * Init a listening Unix socket
  */
 int initListeningSocket(char *path) {
     int sockfd;
@@ -301,18 +302,20 @@ bool authClient(int clientFd) {
         if (selectVal > 0) {
             if (FD_ISSET(sockfd, &readSet)) {
                 responseFd = accept(sockfd, (struct sockaddr *) &caddr, &clen);
-                LogI(DAEMON, "Accepted connection from Activity");
+                // LogI(DAEMON, "Accepted connection from Activity");
             }
             else if (responseFd >= 0 && FD_ISSET(responseFd, &readSet)) {
                 memset(response, 0, sizeof(response));
                 read(responseFd, response, sizeof(response));
-                LogI(DAEMON, "Retrieved response from Activity %s", response);
+                // LogI(DAEMON, "Retrieved response from Activity %s", response);
                 if (strcmp(response, AUTH_OK) == 0) {
+                    unlink(path);
                     close(responseFd);
                     close(sockfd);
                     return true;
                 }
                 else {
+                    unlink(path);
                     close(responseFd);
                     close(sockfd);
                     return false;
@@ -320,30 +323,34 @@ bool authClient(int clientFd) {
             }
             else {
                 // something abnormal here
+                unlink(path);
                 close(responseFd);
                 close(sockfd);
                 return false;
             }
         }
         else if (selectVal == 0) {
-            LogI(DAEMON, "Timed out.");
+            // LogI(DAEMON, "Timed out.");
             // timed out?
             if (responseFd >= 0) {
                 close(responseFd);
             }
+            unlink(path);
             close(sockfd);
             return false;
         }
         else {
-            LogI(DAEMON, "Error.");
+            // LogI(DAEMON, "Error.");
             // timed out?
             if (responseFd >= 0) {
                 close(responseFd);
             }
+            unlink(path);
             close(sockfd);
             return false;
         }
     }
+    return false;
 }
 
 /**
@@ -467,6 +474,8 @@ void serveClients(int listenFd, int listenErrFd) {
 void goDaemonMode() {
     LogI(DAEMON, "This is TinySU ver %s.", TINYSU_VER_STR);
     LogI(DAEMON, "Operating in daemon mode.");
+
+    mkdir("/su", 0777);
     memset(clients, 0, sizeof(clients));
     listenFd = initListeningSocket(TINYSU_SOCKET_PATH);
     listenErrFd = initListeningSocket(TINYSU_SOCKET_ERR_PATH);
