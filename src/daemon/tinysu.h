@@ -19,8 +19,6 @@
 #define TINYSU_SOCKET_ERR_PATH (char*) "/tmp/tinysu.err"
 #endif
 
-#define TINYSU_PORT 12385
-#define TINYSU_PORT_ERR 12386
 #define MAX_CLIENT 100
 
 #define ARG_LEN 10240
@@ -49,7 +47,7 @@
     #define LogV(x, y, args...) __android_log_print(ANDROID_LOG_VERBOSE, x, y, ## args)
     #define LogE(x, y, args...) __android_log_print(ANDROID_LOG_ERROR, x, y, ## args)
 #else
-    #define VERBOSE(x)  x
+    #define VERBOSE(x)
     #define ERROR(x)    x
     #define LogI(x, y, args...) printf("I/[%10s] " y "\n", x, ## args)
     #define LogV(x, y, args...) VERBOSE(printf("V/[%10s] " y "\n", x, ## args))
@@ -102,7 +100,7 @@ template <typename F> void proxy(int from, int to, F onerror) {
         }
 
         getActorNameByFd(from, actorName, log);
-        // LogI(log, "%s says %s", actorName, s);
+        LogV(log, "%s says %s", actorName, s);
 
         write(to, s, (size_t) numRead);
         firstLoop = false;
