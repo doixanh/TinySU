@@ -39,7 +39,7 @@ void connectToDaemon() {
         doClose(daemonFd);
         exit(1);
     }
-    // LogV(CLIENT, "daemonFd=%d", daemonFd);
+    LogV(CLIENT, "daemonFd=%d", daemonFd);
 
     // wait for our id
     memset(s, 0, sizeof(s));
@@ -51,7 +51,7 @@ void connectToDaemon() {
         exit(1);
     }
     clientId = atoi(s);
-    // LogI(CLIENT, "Our id is %d", clientId);
+    LogV(CLIENT, "Our id is %d", clientId);
 
     // create the stderr socket
     if ((daemonErrFd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
@@ -77,7 +77,7 @@ void connectToDaemon() {
     markNonblock(daemonFd);
     markNonblock(daemonErrFd);
 
-    // LogV(CLIENT, "Connected successfully!");
+    LogV(CLIENT, "Connected successfully!");
 }
 
 /**
@@ -90,7 +90,7 @@ void sendCommand(int daemonFd, char *cmd) {
     memset(&timeout, 0, sizeof(timeout));
 
     if (cmd != nullptr) {
-        // LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
+        LogV(CLIENT, " - SendCommand: Sending command %s", cmd);
         strcat(cmd, "\nexit\n");
         write(daemonFd, cmd, strlen(cmd));
     }
@@ -126,7 +126,7 @@ void sendCommand(int daemonFd, char *cmd) {
             if (FD_ISSET(daemonFd, &readSet)) {
                 // forward to stdout
                 proxy(daemonFd, STDOUT_FILENO, [&connected](int from) {
-                    // LogI(CLIENT, "Daemon has just disconnected us :(");
+                    LogV(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
                 });
             }
@@ -134,13 +134,13 @@ void sendCommand(int daemonFd, char *cmd) {
             if (FD_ISSET(daemonErrFd, &readSet)) {
                 // forward to stderr
                 proxy(daemonErrFd, STDERR_FILENO, [&connected](int from) {
-                    // LogI(CLIENT, "Daemon has just disconnected us :(");
+                    LogV(CLIENT, "Daemon has just disconnected us :(");
                     connected = false;
                 });
             }
         }
         else if (selectVal == 0) {
-            // LogI(CLIENT, "Nothing is ready for select()");
+            LogV(CLIENT, "Nothing is ready for select()");
         }
     }
     fflush(stdout);
