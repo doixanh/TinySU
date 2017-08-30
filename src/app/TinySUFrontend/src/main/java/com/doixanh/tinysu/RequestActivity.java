@@ -24,15 +24,15 @@ public class RequestActivity extends Activity {
     private static final String YES = "YaY!\0";
 
     private void write(String path, String result) {
-        Log.i(TAG, "Writing response " + result + " to path " + path);
         LocalSocket socket = new LocalSocket(LocalSocket.SOCKET_STREAM);
-        LocalSocketAddress endpoint = new LocalSocketAddress(path);
+        LocalSocketAddress endpoint = new LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM);
         try {
             socket.connect(endpoint);
             socket.getOutputStream().write(result.getBytes());
             socket.getOutputStream().flush();
             socket.close();
         } catch (IOException e) {
+            Log.e(TAG, " Cannot connect to daemon " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -47,13 +47,6 @@ public class RequestActivity extends Activity {
         int uid = intent.getIntExtra("uid", 0);
         final String path = intent.getStringExtra("path");
         Log.i(TAG, "Requested permission for uid=" + uid + ", path=" + path);
-
-        Log.i(TAG, "Path: " + path);
-        File directory = new File("/su");
-        File[] files = directory.listFiles();
-        for (int i = 0; i < files.length; i++) {
-            Log.i(TAG, "FileName:" + files[i].getName());
-        }
 
         // solve to package and app name
         String names[] = getPackageManager().getPackagesForUid(uid);
