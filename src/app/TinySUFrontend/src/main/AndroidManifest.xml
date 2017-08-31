@@ -18,8 +18,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".RequestActivity"
-            android:theme="@android:style/Theme.Material.Dialog"/>
+        <activity
+            android:name=".RequestActivity"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Material.Dialog" />
     </application>
 
 </manifest>

@@ -16,6 +16,7 @@ import android.widget.TextView;
 import com.doixanh.tinysu.R;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 
 public class RequestActivity extends Activity {
@@ -37,6 +38,20 @@ public class RequestActivity extends Activity {
         }
     }
 
+    private void saveUid(int uid) {
+        Log.i(TAG, "getFilesDir() returns " + getFilesDir().getAbsolutePath());
+
+        try {
+            File out = new File(getFilesDir(), "trusted.txt");
+            FileWriter writer = new FileWriter(out);
+            writer.append(String.valueOf(uid) + "\n");
+            writer.flush();
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -44,7 +59,7 @@ public class RequestActivity extends Activity {
 
         // get the param
         Intent intent = getIntent();
-        int uid = intent.getIntExtra("uid", 0);
+        final int uid = intent.getIntExtra("uid", 0);
         final String path = intent.getStringExtra("path");
         Log.i(TAG, "Requested permission for uid=" + uid + ", path=" + path);
 
@@ -54,7 +69,7 @@ public class RequestActivity extends Activity {
             PackageManager packageManager = getApplicationContext().getPackageManager();
             try {
                 String appName = (String) packageManager.getApplicationLabel(packageManager.getApplicationInfo(names[0], PackageManager.GET_META_DATA));
-                TextView tv = findViewById(R.id.name);
+                TextView tv = (TextView) findViewById(R.id.name);
                 tv.setText(appName);
 
                 Drawable logo = getPackageManager().getApplicationIcon(names[0]);
@@ -82,6 +97,15 @@ public class RequestActivity extends Activity {
         findViewById(R.id.yes).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                write(path, YES);
+                finish();
+            }
+        });
+
+        findViewById(R.id.always).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                saveUid(uid);
                 write(path, YES);
                 finish();
             }
