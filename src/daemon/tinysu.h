@@ -34,6 +34,7 @@
 
 #define AUTH_TIMEOUT 15
 #define AUTH_OK (char*) "YaY!"
+#define AUTH_TRUSTED (char *) "/data/data/com.doixanh.tinysu/files/trusted.txt"
 
 #ifdef ARM
     #define DEFAULT_SHELL (char*) "/system/bin/sh"
@@ -41,14 +42,13 @@
     #define DEFAULT_SHELL (char*) "/bin/sh"
 #endif
 
-
+#define VERBOSE(x)
+#define ERROR(x)    x
 #ifdef ARM
     #define LogI(x, y, args...) __android_log_print(ANDROID_LOG_INFO, x, y, ## args)
-    #define LogV(x, y, args...) __android_log_print(ANDROID_LOG_VERBOSE, x, y, ## args)
-    #define LogE(x, y, args...) __android_log_print(ANDROID_LOG_ERROR, x, y, ## args)
+    #define LogV(x, y, args...) VERBOSE(__android_log_print(ANDROID_LOG_VERBOSE, x, y, ## args))
+    #define LogE(x, y, args...) ERROR(__android_log_print(ANDROID_LOG_ERROR, x, y, ## args))
 #else
-    #define VERBOSE(x)
-    #define ERROR(x)    x
     #define LogI(x, y, args...) printf("I/[%10s] " y "\n", x, ## args)
     #define LogV(x, y, args...) VERBOSE(printf("V/[%10s] " y "\n", x, ## args))
     #define LogE(x, y, args...) ERROR(printf("E/[%10s] " y "\n", x, ## args))

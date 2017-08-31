@@ -249,6 +249,27 @@ bool authClient(int clientFd) {
     LogI(DAEMON, "Client uid is %d, gid is %d", uid, gid);
 #endif
 
+    // check if we are already trusted
+    char line[128];
+    FILE* file = fopen(AUTH_TRUSTED, "r");
+    if (file) {
+        memset(line, 0, sizeof(line));
+        while (fgets(line, sizeof(line), file)) {
+            // remove trailing \n
+            int len = strlen(line);
+            if (line[len] == '\n') {
+                line[len] = 0;
+            }
+            int readUid = atoi(line);
+            if (readUid == uid) {
+                // ok it's there...
+                LogV(DAEMON, "Trusted uid %d.", readUid);
+                return true;
+            }
+        }
+        fclose(file);
+    }
+
     // create a new socket to wait for response from activity
     char path[32];
     sprintf(path, "/su/tinysu.%d.auth", uid);
