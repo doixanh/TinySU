@@ -39,8 +39,6 @@ public class RequestActivity extends Activity {
     }
 
     private void saveUid(int uid) {
-        Log.i(TAG, "getFilesDir() returns " + getFilesDir().getAbsolutePath());
-
         try {
             File out = new File(getFilesDir(), "trusted.txt");
             FileWriter writer = new FileWriter(out);
@@ -48,6 +46,7 @@ public class RequestActivity extends Activity {
             writer.flush();
             writer.close();
         } catch (IOException e) {
+            Log.e(TAG, "Cannot save trusted uid at " + getFilesDir().getAbsolutePath());
             e.printStackTrace();
         }
     }
