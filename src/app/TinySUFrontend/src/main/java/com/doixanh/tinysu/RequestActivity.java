@@ -61,8 +61,6 @@ public class RequestActivity extends Activity {
         Intent intent = getIntent();
         final int uid = intent.getIntExtra("uid", 0);
         final String path = intent.getStringExtra("path");
-        Log.i(TAG, "Requested permission for uid=" + uid + ", path=" + path);
-
         // solve to package and app name
         String names[] = getPackageManager().getPackagesForUid(uid);
         if (names.length > 0) {
@@ -83,33 +81,37 @@ public class RequestActivity extends Activity {
                 all += name + "\n";
             }
             ((TextView) findViewById(R.id.packages)).setText(all);
+            Log.i(TAG, "Permission requested for " + names[0]);
+
+            // binding
+            findViewById(R.id.no).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    write(path, "Nah.");
+                    finish();
+                }
+            });
+
+            findViewById(R.id.yes).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    write(path, YES);
+                    finish();
+                }
+            });
+
+            findViewById(R.id.always).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    saveUid(uid);
+                    write(path, YES);
+                    finish();
+                }
+            });
         }
-
-        // binding
-        findViewById(R.id.no).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                write(path, "Nah.");
-                finish();
-            }
-        });
-
-        findViewById(R.id.yes).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                write(path, YES);
-                finish();
-            }
-        });
-
-        findViewById(R.id.always).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                saveUid(uid);
-                write(path, YES);
-                finish();
-            }
-        });
-
+        else {
+            Log.e(TAG, "Cannot lookup uid " + uid);
+            finish();
+        }
     }
 }
