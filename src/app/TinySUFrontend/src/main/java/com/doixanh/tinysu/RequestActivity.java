@@ -61,15 +61,15 @@ public class RequestActivity extends Activity {
         final int uid = intent.getIntExtra("uid", 0);
         final String path = intent.getStringExtra("path");
         // solve to package and app name
-        String names[] = getPackageManager().getPackagesForUid(uid);
+        PackageManager packageManager = getApplicationContext().getPackageManager();
+        String names[] = packageManager.getPackagesForUid(uid);
         if (names.length > 0) {
-            PackageManager packageManager = getApplicationContext().getPackageManager();
             try {
                 String appName = (String) packageManager.getApplicationLabel(packageManager.getApplicationInfo(names[0], PackageManager.GET_META_DATA));
                 TextView tv = (TextView) findViewById(R.id.name);
                 tv.setText(appName);
 
-                Drawable logo = getPackageManager().getApplicationIcon(names[0]);
+                Drawable logo = packageManager.getApplicationIcon(names[0]);
                 ((ImageView) findViewById(R.id.logo)).setImageDrawable(logo);
             } catch (PackageManager.NameNotFoundException e) {
                 e.printStackTrace();
@@ -107,8 +107,7 @@ public class RequestActivity extends Activity {
                     finish();
                 }
             });
-        }
-        else {
+        } else {
             Log.e(TAG, "Cannot lookup uid " + uid);
             finish();
         }

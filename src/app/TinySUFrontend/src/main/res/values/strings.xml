@@ -2,6 +2,11 @@
     <string name="app_name">TinySU</string>
     <string name="request">This guy is asking for root. Allow?</string>
     <string name="yes">Yay!</string>
+    <string name="yep">Yep!</string>
     <string name="always">Infinitely!</string>
     <string name="no">Hell no!</string>
+    <string name="no2">Err…</string>
+    <string name="delete">Delete</string>
+    <string name="delete_confirm">You hate these guys? Distrust them?</string>
+
 </resources>
