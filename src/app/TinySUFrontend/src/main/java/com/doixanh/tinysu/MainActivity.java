@@ -108,6 +108,9 @@ public class MainActivity extends Activity {
             case R.id.delete:
                 delete();
                 break;
+            case R.id.all:
+                selectAll();
+                break;
         }
         return true;
     }
@@ -158,6 +161,23 @@ public class MainActivity extends Activity {
         adapter.notifyDataSetChanged();
     }
 
+    /**
+     * Select/Deselect all items in the backend array
+     */
+    private void selectAll() {
+        boolean select = false;
+        for (PackageItem item: items) {
+            if (!item.isSelected()) {
+                select = true;
+                break;
+            }
+        }
+        for (PackageItem item: items) {
+            item.setSelected(select);
+        }
+        adapter.notifyDataSetChanged();
+    }
+
     private class PackageArrayAdapter extends ArrayAdapter<PackageItem> {
         public PackageArrayAdapter(Context context, int resource, List<PackageItem> objects) {
             super(context, resource, objects);
@@ -174,6 +194,8 @@ public class MainActivity extends Activity {
             ((TextView) view.findViewById(R.id.name)).setText(item.getName());
             ((TextView) view.findViewById(R.id.packages)).setText(item.getPackageName());
             ((ImageView) view.findViewById(R.id.icon)).setImageDrawable(item.getIcon());
+            ((CheckBox) view.findViewById(R.id.check)).setChecked(item.isSelected());
+
             view.setTag(position);
 
             view.setOnClickListener(new View.OnClickListener() {
