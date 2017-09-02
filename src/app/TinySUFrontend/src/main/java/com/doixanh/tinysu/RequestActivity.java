@@ -41,7 +41,7 @@ public class RequestActivity extends Activity {
     private void saveUid(int uid) {
         try {
             File out = new File(getFilesDir(), "trusted.txt");
-            FileWriter writer = new FileWriter(out);
+            FileWriter writer = new FileWriter(out, true);
             writer.append(String.valueOf(uid) + "\n");
             writer.flush();
             writer.close();
