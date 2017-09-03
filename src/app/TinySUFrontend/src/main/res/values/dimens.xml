@@ -3,4 +3,5 @@
     <dimen name="margin">16dip</dimen>
     <dimen name="marginHalf">8dip</dimen>
     <dimen name="button">48dip</dimen>
+    <dimen name="buttonHalf">24dip</dimen>
 </resources>

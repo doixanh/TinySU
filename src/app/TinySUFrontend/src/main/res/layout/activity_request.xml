@@ -6,55 +6,50 @@
     android:minHeight="100dip"
     android:orientation="vertical">
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1px"
-        android:layout_marginTop="@dimen/marginHalf"
-        android:background="@color/divider" />
-
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="@dimen/margin"
+        android:layout_margin="@dimen/buttonHalf"
         android:text="@string/request"
         android:textAppearance="@android:style/TextAppearance.Material.Small" />
 
-    <RelativeLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <TextView
-            android:id="@+id/name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:textAppearance="@android:style/TextAppearance.Material.Medium" />
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
 
         <ImageView
             android:id="@+id/logo"
             android:layout_width="@dimen/button"
             android:layout_height="@dimen/button"
-            android:layout_marginRight="@dimen/marginHalf"
-            android:layout_toLeftOf="@id/name" />
-    </RelativeLayout>
+            android:layout_marginRight="@dimen/marginHalf" />
 
-    <TextView
-        android:id="@+id/packages"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/marginHalf"
-        android:gravity="center"
-        android:textAppearance="@android:style/TextAppearance.Material.Small" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/button"
+            android:layout_gravity="center_vertical"
+            android:gravity="center_vertical"
+            android:orientation="vertical">
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1px"
-        android:background="@color/divider" />
+            <TextView
+                android:id="@+id/name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="@android:style/TextAppearance.Material.Medium" />
+
+            <TextView
+                android:id="@+id/packages"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="@android:style/TextAppearance.Material.Small" />
+        </LinearLayout>
+    </LinearLayout>
 
     <LinearLayout
         style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/margin"
         android:orientation="horizontal">
 
         <Button
@@ -67,12 +62,6 @@
             android:textAllCaps="true"
             android:textAppearance="@android:style/TextAppearance.Material.Small" />
 
-        <View
-            android:layout_width="1px"
-            android:layout_height="@dimen/button"
-            android:layout_marginTop="1px"
-            android:background="@color/divider" />
-
         <Button
             android:id="@+id/yes"
             style="?android:attr/buttonBarButtonStyle"
@@ -83,11 +72,6 @@
             android:textAllCaps="true"
             android:textAppearance="@android:style/TextAppearance.Material.Small"
             android:textColor="@color/accent_light" />
-        <View
-            android:layout_width="1px"
-            android:layout_height="@dimen/button"
-            android:layout_marginTop="1px"
-            android:background="@color/divider" />
 
         <Button
             android:id="@+id/always"
@@ -97,8 +81,7 @@
             android:layout_weight="1"
             android:text="@string/always"
             android:textAllCaps="true"
-            android:textColor="@color/accent"
-            android:textAppearance="@android:style/TextAppearance.Material.Small" />
-
+            android:textAppearance="@android:style/TextAppearance.Material.Small"
+            android:textColor="@color/accent" />
     </LinearLayout>
 </LinearLayout>

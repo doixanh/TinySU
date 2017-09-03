@@ -79,6 +79,7 @@ public class RequestActivity extends Activity {
             for (String name : names) {
                 all += name + "\n";
             }
+            all = all.substring(0, all.lastIndexOf("\n") - 1);
             ((TextView) findViewById(R.id.packages)).setText(all);
             Log.i(TAG, "Permission requested for " + names[0]);
 
