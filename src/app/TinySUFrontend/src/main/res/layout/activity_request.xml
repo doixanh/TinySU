@@ -49,25 +49,31 @@
         style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/margin"
-        android:orientation="horizontal">
+        android:layout_marginTop="@dimen/buttonHalf"
+        android:orientation="horizontal"
+        android:padding="8dip">
 
         <Button
             android:id="@+id/no"
             style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dip"
+            android:layout_width="wrap_content"
             android:layout_height="@dimen/button"
-            android:layout_weight="1"
+            android:padding="8dip"
             android:text="@string/no"
             android:textAllCaps="true"
             android:textAppearance="@android:style/TextAppearance.Material.Small" />
 
+        <View
+            android:layout_width="0dip"
+            android:layout_height="@dimen/button"
+            android:layout_weight="1" />
+
         <Button
             android:id="@+id/yes"
             style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dip"
+            android:layout_width="wrap_content"
             android:layout_height="@dimen/button"
-            android:layout_weight="1"
+            android:padding="8dip"
             android:text="@string/yes"
             android:textAllCaps="true"
             android:textAppearance="@android:style/TextAppearance.Material.Small"
@@ -76,9 +82,9 @@
         <Button
             android:id="@+id/always"
             style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="0dip"
+            android:layout_width="wrap_content"
             android:layout_height="@dimen/button"
-            android:layout_weight="1"
+            android:padding="8dip"
             android:text="@string/always"
             android:textAllCaps="true"
             android:textAppearance="@android:style/TextAppearance.Material.Small"
